@@ -1,0 +1,14 @@
+/* Kill Clerk card shadow + border + background */
+.cl-card,
+[data-cl-component="card"] {
+  box-shadow: none !important;
+  border: none !important;
+  background: transparent !important;
+}
+
+/* Optional: also ensure the outer root box is flat */
+.cl-rootBox,
+[data-cl-component="rootBox"] {
+  box-shadow: none !important;
+  background: transparent !important;
+}
