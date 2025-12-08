@@ -59,7 +59,7 @@ export const Icons = {
 };
 
 export const AD_CONFIG = {
-  client: 'ca-pub-XXXXXXXXXXXXXXXX',
+  client: 'ca-pub-4286398875959777',
   slots: {
     sidebar: '1234567890',
     feed: '0987654321',

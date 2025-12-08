@@ -23,7 +23,7 @@ const AdUnit: React.FC<AdUnitProps> = ({ slot, format = 'auto', className = '' }
          {/* In production, the ins tag would be populated. For now, a placeholder UI. */}
          <ins className="adsbygoogle"
              style={{ display: 'block', width: '100%', textAlign: 'center' }}
-             data-ad-client="ca-pub-XXXXXXXXXXXXXXXX"
+          data-ad-client="ca-pub-4286398875959777"
              data-ad-slot={slot}
              data-ad-format={format}
              data-full-width-responsive="true"></ins>
