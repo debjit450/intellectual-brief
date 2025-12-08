@@ -1,116 +1,114 @@
 import { Article, Category, NewsResponse } from "../types";
 
-const NEWS_API_KEY = "f52c23315e6542cda7d0c0b604ac0cad";
-const BASE_URL = "https://newsapi.org/v2/everything";
+const NEWS_API_KEY = "pub_6b4fe71437b14a8fa1a14eaa600e3f8a";
+const BASE_URL = "https://newsdata.io/api/1/latest";
 
-// --- Mock Data Fallback ---
-const FALLBACK_DATA: Record<string, any[]> = {
-  "business": [
-    {
-      "source": { "id": "bloomberg", "name": "Bloomberg" },
-      "author": "Mark Gurman",
-      "title": "Apple Plans Major Overhaul of Watch Design for Tenth Anniversary",
-      "description": "Apple Inc. is planning a major redesign for its smartwatch, dubbed Apple Watch X, to mark the device's 10-year anniversary.",
-      "url": "https://www.bloomberg.com/news/articles/2025-08-13/apple-watch-x-design-overhaul-planned-for-device-s-10th-anniversary",
-      "urlToImage": "https://assets.bwbx.io/images/users/iqjWHBFdfxIU/i.v6.pX.j.m4/v1/1200x800.jpg",
-      "publishedAt": "2025-08-13T12:00:00Z",
-      "content": "Apple Inc. is preparing a significant overhaul..."
-    },
-    {
-      "source": { "id": "wsj", "name": "The Wall Street Journal" },
-      "author": "Chip Cutter",
-      "title": "The New rules of Corporate Retreats",
-      "description": "Companies are rethinking off-sites, mixing strategy sessions with wellness breaks.",
-      "url": "https://www.wsj.com",
-      "urlToImage": "https://images.wsj.net/im-999999?width=860&height=573",
-      "publishedAt": "2025-08-14T09:00:00Z"
-    }
-  ],
-  "ai": [
-    {
-      "source": { "id": "wired", "name": "Wired" },
-      "author": "Will Knight",
-      "title": "The Race to Build an AI That Can Reason Like a Human",
-      "description": "DeepMind and OpenAI are pushing the boundaries of what large language models can do, targeting reasoning capabilities.",
-      "url": "https://www.wired.com",
-      "urlToImage": "https://media.wired.com/photos/65c536a00504764436573752/master/w_1600,c_limit/Business_OpenAI_Sora_Model.jpg",
-      "publishedAt": "2025-09-01T14:30:00Z"
-    }
-  ]
-};
-
-const mapNewsApiToArticle = (item: any): Article => ({
-  id: item.url || Math.random().toString(36),
+const mapApiToArticle = (item: any): Article => ({
+  id: item.article_id || item.link || Math.random().toString(36),
   title: item.title,
-  source: item.source.name,
+  source: item.source_id || item.source || "Unknown",
   summary: item.description || item.content || "No summary available.",
-  timestamp: new Date(item.publishedAt).toLocaleDateString(undefined, { month: 'long', day: 'numeric' }),
-  url: item.url,
-  imageUrl: item.urlToImage,
-  content: item.content
+  timestamp: item.pubDate
+    ? new Date(item.pubDate).toLocaleDateString(undefined, {
+        month: "long",
+        day: "numeric",
+      })
+    : "",
+  url: item.link,
+  imageUrl: item.image_url,
+  content: item.content || item.description,
 });
 
-export const fetchNews = async (category: Category, query?: string): Promise<NewsResponse> => {
-  let params: Record<string, string> = {
-    apiKey: NEWS_API_KEY,
-    language: 'en',
-    sortBy: 'publishedAt',
+export const fetchNews = async (
+  category: Category,
+  query?: string
+): Promise<NewsResponse> => {
+  // base params – keep reasonably broad
+  const baseParams: Record<string, string> = {
+    apikey: NEWS_API_KEY,
+    language: "en",
+    // don't send size > 10 on free tier -> will error
+    // omit size entirely and default to 10
   };
 
+  // category / query logic
   if (query) {
-    params.q = query;
+    baseParams.q = query;
   } else {
     switch (category) {
-      case 'Technology':
-        params.domains = 'techcrunch.com,wired.com,theverge.com';
+      case "Technology":
+        baseParams.category = "technology";
         break;
-      case 'Business':
-        params.domains = 'bloomberg.com,wsj.com,cnbc.com,reuters.com';
+      case "Business":
+        baseParams.category = "business";
         break;
-      case 'Artificial Intelligence':
-        params.q = '"artificial intelligence" OR "OpenAI" OR "DeepMind"';
+      case "Artificial Intelligence":
+        baseParams.category = "technology";
+        baseParams.q = "artificial intelligence AI OpenAI DeepMind";
         break;
-      case 'Venture Capital':
-        params.q = 'venture capital OR startup funding';
+      case "Venture Capital":
+        baseParams.category = "business";
+        baseParams.q = "venture capital startup funding series A";
         break;
-      case 'Markets':
-        params.q = 'stock market OR economy';
+      case "Markets":
+        baseParams.category = "business";
+        baseParams.q = "stock market equities economy finance";
         break;
-      case 'Policy':
-        params.q = 'tech policy OR regulation';
+      case "Policy":
+        baseParams.category = "politics";
+        baseParams.q = "tech policy regulation antitrust privacy";
         break;
       default:
-        params.domains = 'techcrunch.com';
+        baseParams.category = "top";
+        break;
     }
   }
 
-  const queryString = new URLSearchParams(params).toString();
-  
-  try {
-    const response = await fetch(`${BASE_URL}?${queryString}`);
-    if (!response.ok) {
-      throw new Error(`NewsAPI Error: ${response.status}`);
-    }
-    const data = await response.json();
-    
-    if (data.articles) {
-      return {
-        articles: data.articles.filter((a: any) => a.title && a.description).map(mapNewsApiToArticle)
-      };
-    }
-    return { articles: [] };
+  const articles: Article[] = [];
+  let nextPage: string | undefined = undefined;
 
-  } catch (error) {
-    console.warn("API Fetch failed, using fallback data for demonstration.", error);
-    
-    // Select fallback data based on category mapping
-    let fallbackKey = 'business';
-    if (category === 'Artificial Intelligence') fallbackKey = 'ai';
-    
-    const fallbackArticles = (FALLBACK_DATA[fallbackKey] || FALLBACK_DATA['business'])
-      .map(mapNewsApiToArticle);
+  // paginate using nextPage token (NOT page=1,2,…)
+  // tweak maxLoops to control how many pages you pull
+  const maxLoops = 5;
 
-    // Shuffle slightly
-    return { articles: fallbackArticles.sort(() => 0.5 - Math.random()) };
+  for (let i = 0; i < maxLoops; i++) {
+    const params: Record<string, string> = { ...baseParams };
+
+    if (nextPage) {
+      params.page = nextPage; // docs: page=nextPageString
+    }
+
+    const url = `${BASE_URL}?${new URLSearchParams(params).toString()}`;
+
+    try {
+      const res = await fetch(url);
+      if (!res.ok) {
+        console.error("NewsData.io error:", res.status, res.statusText);
+        break;
+      }
+
+      const data = await res.json();
+
+      if (!data.results || !Array.isArray(data.results)) {
+        break;
+      }
+
+      const mapped = data.results
+        .filter((a: any) => a.title && a.link)
+        .map(mapApiToArticle);
+
+      articles.push(...mapped);
+
+      // Prepare for next page
+      nextPage = data.nextPage;
+      if (!nextPage) {
+        break; // no more pages
+      }
+    } catch (err) {
+      console.error("NewsData.io fetch failed:", err);
+      break;
+    }
   }
+
+  return { articles };
 };
