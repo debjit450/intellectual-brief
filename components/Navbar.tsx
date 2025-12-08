@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Icons, TBLogo } from '../constants.tsx';
 import { useAuth } from '../context/AuthContext';
-
+import logo from '/assets/logo.png';
 interface NavbarProps {
   onSearch: (query: string) => void;
   onMenuClick: () => void;
@@ -39,7 +39,7 @@ const Navbar: React.FC<NavbarProps> = ({ onSearch, onMenuClick, theme, onToggleT
               onClick={() => window.location.reload()}
             >
               <div className="w-9 h-9 sm:w-10 sm:h-10 md:w-12 md:h-12 text-neutral-900 dark:text-white group-hover:text-primary transition-colors duration-500">
-                <img src="/assets/logo.png" alt="The Intellectual Brief Logo" className="w-full h-full object-contain" />
+                <img src={logo} alt="The Intellectual Brief Logo" className="w-full h-full object-contain" />
               </div>
               <div className="flex flex-col justify-center">
                 <span className="text-base sm:text-lg md:text-2xl font-serif font-bold text-neutral-900 dark:text-white leading-none tracking-tight">

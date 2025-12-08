@@ -2,7 +2,7 @@ import React from 'react';
 import { CATEGORIES, ICONS, TBLogo, AD_CONFIG } from '../constants.tsx';
 import { Category } from '../types';
 import AdUnit from './AdUnit';
-
+import logo from '/assets/logo.png';
 interface SidebarProps {
   activeCategory: Category;
   onSelectCategory: (c: Category) => void;
@@ -45,7 +45,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeCategory, onSelectCategory, cla
          <div className="mt-8 pt-6 border-t border-neutral-200 dark:border-neutral-800">
             <div className="flex items-center gap-3 mb-3">
                <div className="w-6 h-6 text-neutral-900 dark:text-neutral-100">
-              <img src="/assets/logo.png" alt="The Intellectual Brief Logo" className="w-full h-full object-contain" />
+              <img src={logo} alt="The Intellectual Brief Logo" className="w-full h-full object-contain" />
                </div>
                <span className="font-serif italic text-neutral-800 dark:text-neutral-200 text-sm">Intellectual Brief</span>
             </div>
