@@ -20,6 +20,40 @@ const AppContent: React.FC = () => {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
 
+  // inside AppContent component:
+
+  type EditionKey = "us_world" | "us" | "in" | "uk" | "global";
+
+  const EDITIONS: Record<
+    EditionKey,
+    { label: string; countryParam?: string }
+  > = {
+    // “US & World mainly”: US + a few key English-speaking markets
+    us_world: {
+      label: "US & World",
+      countryParam: "us,gb,ca,au,in",
+    },
+    us: {
+      label: "US only",
+      countryParam: "us",
+    },
+    in: {
+      label: "India",
+      countryParam: "in",
+    },
+    uk: {
+      label: "UK",
+      countryParam: "gb",
+    },
+    global: {
+      label: "Global",
+      countryParam: undefined, // no country filter => full world
+    },
+  };
+
+  const [edition, setEdition] = useState<EditionKey>("us_world");
+
+
   const { user } = useAuth();
 
   useEffect(() => {
@@ -82,6 +116,8 @@ const AppContent: React.FC = () => {
             onSelectCategory={handleCategorySelect}
             bookmarksCount={bookmarks.length}
             className="pt-8"
+            edition={edition}                          // NEW
+            onChangeEdition={setEdition}               // NEW
           />
         </div>
 
@@ -92,6 +128,7 @@ const AppContent: React.FC = () => {
             onSelectArticle={setSelectedArticle}
             bookmarks={bookmarks}
             toggleBookmark={toggleBookmark}
+            countryParam={EDITIONS[edition].countryParam}  // NEW
           />
 
           <footer className="border-t border-neutral-200 dark:border-neutral-800 py-20 text-center mt-20 bg-neutral-100 dark:bg-neutral-900/50">

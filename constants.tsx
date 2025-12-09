@@ -1,12 +1,12 @@
 import React from 'react';
-import { 
-  Globe, 
-  Search, 
-  Bookmark, 
-  User, 
-  Menu, 
-  X, 
-  Share2, 
+import {
+  Globe,
+  Search,
+  Bookmark,
+  User,
+  Menu,
+  X,
+  Share2,
   ExternalLink,
   ChevronRight,
   Loader2,
@@ -19,11 +19,47 @@ import {
   TrendingUp,
   Landmark,
   Scale,
-  Zap
+  Zap,
+  Activity,
+  Stethoscope,
+  Clapperboard,
+  Leaf,
+  GraduationCap,
+  ShieldAlert,
+  Home,
+  Utensils,
+  Plane,
+  Sparkles,
+  Ellipsis,
+  FlaskConical,
+  Newspaper,
 } from 'lucide-react';
 import { Category } from './types';
 
-export const CATEGORIES: Category[] = ['Technology', 'Business', 'Artificial Intelligence', 'Venture Capital', 'Markets', 'Policy'];
+// All sections used in the sidebar / feed
+export const CATEGORIES: Category[] = [
+  'Top',
+  'World',
+  'Business',
+  'Markets',
+  'Technology',
+  'Artificial Intelligence',
+  'Venture Capital',
+  'Politics',
+  'Policy',
+  'Science',
+  'Sports',
+  'Health',
+  'Entertainment',
+  'Environment',
+  'Education',
+  'Crime',
+  'Domestic',
+  'Lifestyle',
+  'Food',
+  'Tourism',
+  'Other',
+];
 
 // Luxury Monogram "IB"
 export const TBLogo = ({ className }: { className?: string }) => (
@@ -33,12 +69,32 @@ export const TBLogo = ({ className }: { className?: string }) => (
 );
 
 export const ICONS: Record<string, React.ReactNode> = {
-  'Technology': <Cpu className="w-4 h-4" />,
-  'Business': <Briefcase className="w-4 h-4" />,
+  Top: <Newspaper className="w-4 h-4" />,
+  World: <Globe className="w-4 h-4" />,
+
+  Business: <Briefcase className="w-4 h-4" />,
+  Markets: <TrendingUp className="w-4 h-4" />,
+
+  Technology: <Cpu className="w-4 h-4" />,
   'Artificial Intelligence': <Zap className="w-4 h-4" />,
-  'Venture Capital': <TrendingUp className="w-4 h-4" />,
-  'Markets': <Landmark className="w-4 h-4" />,
-  'Policy': <Scale className="w-4 h-4" />,
+  'Venture Capital': <Landmark className="w-4 h-4" />,
+
+  Politics: <Landmark className="w-4 h-4" />,
+  Policy: <Scale className="w-4 h-4" />,
+
+  Science: <FlaskConical className="w-4 h-4" />,
+  Sports: <Activity className="w-4 h-4" />,
+  Health: <Stethoscope className="w-4 h-4" />,
+  Entertainment: <Clapperboard className="w-4 h-4" />,
+  Environment: <Leaf className="w-4 h-4" />,
+  Education: <GraduationCap className="w-4 h-4" />,
+
+  Crime: <ShieldAlert className="w-4 h-4" />,
+  Domestic: <Home className="w-4 h-4" />,
+  Lifestyle: <Sparkles className="w-4 h-4" />,
+  Food: <Utensils className="w-4 h-4" />,
+  Tourism: <Plane className="w-4 h-4" />,
+  Other: <Ellipsis className="w-4 h-4" />,
 };
 
 export const Icons = {
@@ -55,7 +111,7 @@ export const Icons = {
   Sun,
   Moon,
   Clock,
-  ArrowUpRight
+  ArrowUpRight,
 };
 
 export const AD_CONFIG = {
@@ -63,5 +119,5 @@ export const AD_CONFIG = {
   slots: {
     sidebar: '1234567890',
     feed: '0987654321',
-  }
+  },
 };

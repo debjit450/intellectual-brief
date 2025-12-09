@@ -186,6 +186,18 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
             <span className="flex items-center gap-2">
               <Icons.Clock className="w-3 h-3" /> {article.timestamp}
             </span>
+
+            {article.countryName && (
+              <span className="flex items-center gap-2">
+                {/* You can swap this for a Globe icon if you have one */}
+                <span className="w-1 h-1 rounded-full bg-neutral-400" />
+                <span>
+                  {article.countryCode === "us"
+                    ? "US"
+                    : article.countryName}
+                </span>
+              </span>
+            )}
           </div>
         </header>
 
