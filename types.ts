@@ -8,6 +8,8 @@ export interface Article {
   category?: string;
   imageUrl?: string;
   content?: string;
+  countryCode?: string;
+  countryName?: string;
 }
 
 export interface User {

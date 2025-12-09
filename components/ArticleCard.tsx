@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Article } from '../types';
 import { Icons, TBLogo } from '../constants.tsx';
+import { generateSlug } from '../utils/slug';
 
 interface ArticleCardProps {
   article: Article;
-  onSelect: (article: Article) => void;
+  onSelect?: (article: Article) => void;
   isBookmarked: boolean;
   onToggleBookmark: (id: string) => void;
   variant?: 'hero' | 'standard' | 'compact';
@@ -20,12 +22,14 @@ const ArticleCard: React.FC<ArticleCardProps> = ({
   
   const [imageError, setImageError] = useState(false);
   const hasImage = !!article.imageUrl && !imageError;
+  const articleSlug = generateSlug(article.title, article.id);
+  const articleUrl = `/article/${articleSlug}`;
 
   if (variant === 'hero') {
     return (
-      <div 
-        className="group relative w-full cursor-pointer"
-        onClick={() => onSelect(article)}
+      <Link 
+        to={articleUrl}
+        className="group relative w-full cursor-pointer block"
       >
         <div className="relative aspect-[16/9] md:aspect-[21/9] w-full overflow-hidden mb-8 bg-neutral-100 dark:bg-neutral-900 border border-neutral-100 dark:border-neutral-800">
            {hasImage ? (
@@ -71,15 +75,15 @@ const ArticleCard: React.FC<ArticleCardProps> = ({
              </span>
            </div>
         </div>
-      </div>
+      </Link>
     );
   }
 
   // Standard Editorial Card
   return (
-    <div 
-      className="group flex flex-col h-full cursor-pointer pb-10 border-b border-neutral-200 dark:border-neutral-800 last:border-0 md:border-none"
-      onClick={() => onSelect(article)}
+    <Link 
+      to={articleUrl}
+      className="group flex flex-col h-full cursor-pointer pb-10 border-b border-neutral-200 dark:border-neutral-800 last:border-0 md:border-none block"
     >
       <div className="flex flex-col gap-3 mb-4">
         <div className="flex items-center justify-between">
@@ -121,7 +125,7 @@ const ArticleCard: React.FC<ArticleCardProps> = ({
       <div className="mt-4 text-[10px] font-mono text-neutral-400 uppercase tracking-widest">
         {article.timestamp}
       </div>
-    </div>
+    </Link>
   );
 };
 

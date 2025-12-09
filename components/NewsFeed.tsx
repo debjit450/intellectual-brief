@@ -9,7 +9,7 @@ import AdUnit from './AdUnit';
 interface NewsFeedProps {
   activeCategory: Category;
   searchQuery: string;
-  onSelectArticle: (article: Article) => void;
+  onSelectArticle?: (article: Article) => void;
   bookmarks: string[];
   toggleBookmark: (id: string) => void;
   countryParam?: string;

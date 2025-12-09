@@ -1,182 +1,26 @@
-import React, { useState, useEffect } from 'react';
-import { HashRouter } from 'react-router-dom';
-import Navbar from './components/Navbar';
-import Sidebar from './components/Sidebar';
-import NewsFeed from './components/NewsFeed';
-import ArticleDetail from './components/ArticleDetail';
-import AuthModal from './components/AuthModal';
-import { AuthProvider, useAuth } from './context/AuthContext';
-import { Category, Article } from './types';
-import logo from '/assets/logo.png';
-import { Analytics } from "@vercel/analytics/react"
-
-const AppContent: React.FC = () => {
-  const [activeCategory, setActiveCategory] = useState<Category>('Technology');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
-  const [bookmarks, setBookmarks] = useState<string[]>([]);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
-  const [showAuthModal, setShowAuthModal] = useState(false);
-  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
-
-  // inside AppContent component:
-
-  type EditionKey = "us_world" | "us" | "in" | "uk" | "global";
-
-  const EDITIONS: Record<
-    EditionKey,
-    { label: string; countryParam?: string }
-  > = {
-    // “US & World mainly”: US + a few key English-speaking markets
-    us_world: {
-      label: "US & World",
-      countryParam: "us,gb,ca,au,in",
-    },
-    us: {
-      label: "US only",
-      countryParam: "us",
-    },
-    in: {
-      label: "India",
-      countryParam: "in",
-    },
-    uk: {
-      label: "UK",
-      countryParam: "gb",
-    },
-    global: {
-      label: "Global",
-      countryParam: undefined, // no country filter => full world
-    },
-  };
-
-  const [edition, setEdition] = useState<EditionKey>("us_world");
-
-
-  const { user } = useAuth();
-
-  useEffect(() => {
-    if (theme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  }, [theme]);
-
-  const toggleTheme = () => {
-    setTheme(prev => prev === 'light' ? 'dark' : 'light');
-  };
-
-  const handleSearch = (query: string) => {
-    setSearchQuery(query);
-  };
-
-  const handleCategorySelect = (category: Category) => {
-    setActiveCategory(category);
-    setSearchQuery('');
-    setIsSidebarOpen(false);
-  };
-
-  const toggleBookmark = (id: string) => {
-    if (!user) {
-      setAuthMode('signup');
-      setShowAuthModal(true);
-      return;
-    }
-    setBookmarks(prev =>
-      prev.includes(id) ? prev.filter(b => b !== id) : [...prev, id]
-    );
-  };
-
-  return (
-    <div className="min-h-screen bg-paper dark:bg-paper-dark font-sans text-ink dark:text-ink-dark transition-colors duration-500">
-
-      <Navbar
-        onSearch={handleSearch}
-        onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)}
-        theme={theme}
-        onToggleTheme={toggleTheme}
-        onOpenAuth={() => { setAuthMode('login'); setShowAuthModal(true); }}
-      />
-
-      <div className="max-w-[1600px] mx-auto relative flex">
-        {/* Mobile Sidebar Overlay */}
-        {isSidebarOpen && (
-          <div
-            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden animate-fade-in"
-            onClick={() => setIsSidebarOpen(false)}
-          />
-        )}
-
-        {/* Sidebar */}
-        <div className={`fixed lg:sticky top-0 h-screen z-50 lg:z-auto bg-paper dark:bg-paper-dark transition-transform duration-500 cubic-bezier(0.16, 1, 0.3, 1) lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} shadow-2xl lg:shadow-none w-64`}>
-          <Sidebar
-            activeCategory={activeCategory}
-            onSelectCategory={handleCategorySelect}
-            bookmarksCount={bookmarks.length}
-            className="pt-8"
-            edition={edition}                          // NEW
-            onChangeEdition={setEdition}               // NEW
-          />
-        </div>
-
-        <main className="flex-1 min-w-0">
-          <NewsFeed
-            activeCategory={activeCategory}
-            searchQuery={searchQuery}
-            onSelectArticle={setSelectedArticle}
-            bookmarks={bookmarks}
-            toggleBookmark={toggleBookmark}
-            countryParam={EDITIONS[edition].countryParam}  // NEW
-          />
-
-          <footer className="border-t border-neutral-200 dark:border-neutral-800 py-20 text-center mt-20 bg-neutral-100 dark:bg-neutral-900/50">
-            <div className="max-w-lg mx-auto px-6">
-              <div className="mb-6 flex justify-center text-neutral-400">
-                <img src={logo} alt="Logo" className="w-10 h-10 object-contain" />
-              </div>
-              <p className="text-xl font-serif italic text-neutral-600 dark:text-neutral-400 mb-6">
-                "Knowledge is the new currency."
-              </p>
-              <div className="flex justify-center gap-6 text-xs text-neutral-400 font-mono uppercase tracking-widest mb-8">
-                <a href="#" className="hover:text-primary">About</a>
-                <a href="#" className="hover:text-primary">Masthead</a>
-                <a href="#" className="hover:text-primary">Privacy</a>
-              </div>
-              <p className="text-[10px] text-neutral-400 font-sans">
-                © 2024 The Intellectual Brief. All Rights Reserved.
-              </p>
-            </div>
-          </footer>
-        </main>
-      </div>
-
-      {selectedArticle && (
-        <ArticleDetail
-          article={selectedArticle}
-          onClose={() => setSelectedArticle(null)}
-        />
-      )}
-
-      {showAuthModal && (
-        <AuthModal
-          onClose={() => setShowAuthModal(false)}
-          initialMode={authMode}
-        />
-      )}
-      <Analytics />
-    </div>
-  );
-};
+import React from 'react';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { HelmetProvider } from 'react-helmet-async';
+import { AuthProvider } from './context/AuthContext';
+import { Analytics } from "@vercel/analytics/react";
+import HomePage from './pages/HomePage';
+import ArticlePage from './pages/ArticlePage';
+import NotFound from './pages/NotFound';
 
 const App: React.FC = () => {
   return (
-    <HashRouter>
-      <AuthProvider>
-        <AppContent />
-      </AuthProvider>
-    </HashRouter>
+    <HelmetProvider>
+      <BrowserRouter>
+        <AuthProvider>
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/article/:slug" element={<ArticlePage />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+          <Analytics />
+        </AuthProvider>
+      </BrowserRouter>
+    </HelmetProvider>
   );
 };
 

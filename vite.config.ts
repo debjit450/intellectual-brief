@@ -18,6 +18,15 @@ export default defineConfig(({ mode }) => {
         alias: {
           '@': path.resolve(__dirname, '.'),
         }
+      },
+      // Handle SPA routing - serve index.html for all routes
+      preview: {
+        port: 3000,
+      },
+      build: {
+        rollupOptions: {
+          // Ensure proper handling of dynamic routes
+        }
       }
     };
 });
