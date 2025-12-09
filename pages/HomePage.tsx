@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import Navbar from '../components/Navbar';
 import Sidebar from '../components/Sidebar';
@@ -216,10 +216,16 @@ const HomePage: React.FC = () => {
               <p className="text-xl font-serif italic text-neutral-600 dark:text-neutral-400 mb-6">
                 "Knowledge is the new currency."
               </p>
-              <div className="flex justify-center gap-6 text-xs text-neutral-400 font-mono uppercase tracking-widest mb-8">
-                <a href="#" className="hover:text-primary">About</a>
-                <a href="#" className="hover:text-primary">Masthead</a>
-                <a href="#" className="hover:text-primary">Privacy</a>
+              <div className="flex flex-wrap justify-center gap-6 text-xs text-neutral-400 font-mono uppercase tracking-widest mb-8">
+                <Link to="/about" className="hover:text-primary transition-colors">About</Link>
+                <Link to="/masthead" className="hover:text-primary transition-colors">Masthead</Link>
+                <Link to="/editorial" className="hover:text-primary transition-colors">Editorial</Link>
+                <Link to="/contact" className="hover:text-primary transition-colors">Contact</Link>
+                <Link to="/privacy" className="hover:text-primary transition-colors">Privacy</Link>
+                <Link to="/terms" className="hover:text-primary transition-colors">Terms</Link>
+                <Link to="/cookies" className="hover:text-primary transition-colors">Cookies</Link>
+                <Link to="/disclaimer" className="hover:text-primary transition-colors">Disclaimer</Link>
+                <Link to="/accessibility" className="hover:text-primary transition-colors">Accessibility</Link>
               </div>
               <p className="text-[10px] text-neutral-400 font-sans">
                 © 2024 The Intellectual Brief. All Rights Reserved.

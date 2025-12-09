@@ -6,6 +6,15 @@ import { Analytics } from "@vercel/analytics/react";
 import HomePage from './pages/HomePage';
 import ArticlePage from './pages/ArticlePage';
 import RSSPage from './pages/RSSPage';
+import AboutPage from './pages/AboutPage';
+import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
+import TermsOfServicePage from './pages/TermsOfServicePage';
+import CookiePolicyPage from './pages/CookiePolicyPage';
+import EditorialPolicyPage from './pages/EditorialPolicyPage';
+import ContactPage from './pages/ContactPage';
+import MastheadPage from './pages/MastheadPage';
+import DisclaimerPage from './pages/DisclaimerPage';
+import AccessibilityPage from './pages/AccessibilityPage';
 import NotFound from './pages/NotFound';
 
 const App: React.FC = () => {
@@ -17,6 +26,15 @@ const App: React.FC = () => {
             <Route path="/" element={<HomePage />} />
             <Route path="/article/:slug" element={<ArticlePage />} />
             <Route path="/rss.xml" element={<RSSPage />} />
+            <Route path="/about" element={<AboutPage />} />
+            <Route path="/privacy" element={<PrivacyPolicyPage />} />
+            <Route path="/terms" element={<TermsOfServicePage />} />
+            <Route path="/cookies" element={<CookiePolicyPage />} />
+            <Route path="/editorial" element={<EditorialPolicyPage />} />
+            <Route path="/contact" element={<ContactPage />} />
+            <Route path="/masthead" element={<MastheadPage />} />
+            <Route path="/disclaimer" element={<DisclaimerPage />} />
+            <Route path="/accessibility" element={<AccessibilityPage />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
           <Analytics />
