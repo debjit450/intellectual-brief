@@ -4,6 +4,7 @@ import { generateFullArticle } from '../services/geminiService';
 import { Icons, TBLogo } from '../constants.tsx';
 import ReactMarkdown from 'react-markdown';
 import logo from '/assets/logo.png';
+
 interface ArticleDetailProps {
   article: Article;
   onClose: () => void;
@@ -13,6 +14,9 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
   const [fullContent, setFullContent] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [imageError, setImageError] = useState(false);
+
+  // --- NEW: share feedback state ---
+  const [shareFeedback, setShareFeedback] = useState<string | null>(null);
 
   // --- Helper to set or create meta tags in <head> ---
   const setMetaTag = (attr: 'name' | 'property', key: string, value: string) => {
@@ -107,6 +111,41 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
     };
   }, [article]);
 
+  // --- NEW: Share handler (Web Share + clipboard fallback) ---
+  const handleShare = async () => {
+    if (typeof window === 'undefined') return;
+
+    const shareUrl = article.url || window.location.href;
+    const shareTitle = article.title;
+    const shareText =
+      article.summary ||
+      'Executive-ready brief from The Intellectual Brief.';
+
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: shareTitle,
+          text: shareText,
+          url: shareUrl
+        });
+        setShareFeedback('Shared');
+      } else if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(shareUrl);
+        setShareFeedback('Link copied');
+      } else {
+        // Last-resort fallback
+        window.prompt('Copy this link', shareUrl);
+        setShareFeedback('Link ready');
+      }
+    } catch (err) {
+      console.error('Share failed:', err);
+      setShareFeedback('Could not share');
+    } finally {
+      // Auto-clear feedback after 2 seconds
+      setTimeout(() => setShareFeedback(null), 2000);
+    }
+  };
+
   // JSON-LD for this article (NewsArticle)
   const articleLd = {
     "@context": "https://schema.org",
@@ -154,9 +193,21 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
           <button className="p-2 text-neutral-400 hover:text-primary transition-colors" title="Save to Bookmarks">
             <Icons.Bookmark className="w-5 h-5" />
           </button>
-          <button className="p-2 text-neutral-400 hover:text-primary transition-colors" title="Share Article">
+
+          {/* NEW: Share button wired up */}
+          <button
+            onClick={handleShare}
+            className="relative p-2 text-neutral-400 hover:text-primary transition-colors"
+            title="Share Article"
+          >
             <Icons.Share className="w-5 h-5" />
+            {shareFeedback && (
+              <span className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[9px] font-mono uppercase tracking-[0.16em] text-neutral-400">
+                {shareFeedback}
+              </span>
+            )}
           </button>
+
           <a
             href={article.url}
             target="_blank"
