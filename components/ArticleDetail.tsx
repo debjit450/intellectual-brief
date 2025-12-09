@@ -22,11 +22,34 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
   const [shareFeedback, setShareFeedback] = useState<string | null>(null);
 
   const articleSlug = generateSlug(article.title, article.id);
-  const articleUrl = `${window.location.origin}/article/${articleSlug}`;
+  const articleUrl = typeof window !== 'undefined'
+    ? `${window.location.origin}/article/${articleSlug}`
+    : `https://theintellectualbrief.online/article/${articleSlug}`;
   const title = `${article.title} • The Intellectual Brief`;
   const description =
     article.summary ||
     'Executive-ready brief from The Intellectual Brief on a key technology or business story.';
+
+  // Generate keywords from article content
+  const keywords = [
+    article.title,
+    article.category || '',
+    article.source,
+    'technology news',
+    'AI news',
+    'business intelligence',
+    'executive brief',
+    'The Intellectual Brief'
+  ].filter(Boolean).join(', ');
+
+  // Parse timestamp to ISO date if possible
+  const publishedDate = article.timestamp
+    ? new Date(article.timestamp).toISOString()
+    : new Date().toISOString();
+
+  // Estimate word count from content (will update when fullContent loads)
+  const currentContent = fullContent || article.summary || '';
+  const wordCount = currentContent.split(/\s+/).length;
 
   useEffect(() => {
     let isMounted = true;
@@ -105,31 +128,90 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
     }
   };
 
-  // JSON-LD for this article (NewsArticle)
-  const articleLd = {
+  // Enhanced JSON-LD for this article (NewsArticle with comprehensive metadata)
+  // This will be updated when fullContent loads via useEffect
+  const articleLd = React.useMemo(() => ({
     "@context": "https://schema.org",
     "@type": "NewsArticle",
     "headline": article.title,
     "description": article.summary,
-    "image": article.imageUrl ? [article.imageUrl] : undefined,
+    "image": article.imageUrl ? [
+      {
+        "@type": "ImageObject",
+        "url": article.imageUrl,
+        "width": 1200,
+        "height": 630
+      }
+    ] : undefined,
     "author": {
       "@type": "Organization",
-      "name": "The Intellectual Brief"
+      "name": "The Intellectual Brief",
+      "url": "https://theintellectualbrief.online"
     },
     "publisher": {
       "@type": "NewsMediaOrganization",
       "name": "The Intellectual Brief",
       "logo": {
         "@type": "ImageObject",
-        "url": "https://YOUR_DOMAIN_HERE/logo.png"
-      }
+        "url": "https://theintellectualbrief.online/assets/logo.png",
+        "width": 512,
+        "height": 512
+      },
+      "sameAs": [
+        "https://www.instagram.com/theintellectualbrief",
+        "https://www.youtube.com/@theintellectualbrief",
+        "https://x.com/TIBReports",
+        "https://www.linkedin.com/company/theintellectualbrief"
+      ]
     },
     "mainEntityOfPage": {
       "@type": "WebPage",
       "@id": articleUrl
     },
-    "url": articleUrl
-    // You can add datePublished / dateModified when you store full ISO timestamps in Article
+    "url": articleUrl,
+    "datePublished": publishedDate,
+    "dateModified": publishedDate,
+    "articleSection": article.category || "Technology",
+    "keywords": keywords,
+    "articleBody": currentContent,
+    "wordCount": wordCount,
+    "inLanguage": "en-US",
+    "isAccessibleForFree": true,
+    "copyrightHolder": {
+      "@type": "Organization",
+      "name": "The Intellectual Brief"
+    },
+    "copyrightYear": new Date().getFullYear(),
+    "mentions": article.source ? [{
+      "@type": "Organization",
+      "name": article.source
+    }] : undefined
+  }), [article, articleUrl, publishedDate, keywords, currentContent, wordCount]);
+
+  // BreadcrumbList JSON-LD
+  const breadcrumbLd = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      {
+        "@type": "ListItem",
+        "position": 1,
+        "name": "Home",
+        "item": "https://theintellectualbrief.online/"
+      },
+      {
+        "@type": "ListItem",
+        "position": 2,
+        "name": article.category || "Technology",
+        "item": `https://theintellectualbrief.online/?category=${encodeURIComponent(article.category || 'Technology')}`
+      },
+      {
+        "@type": "ListItem",
+        "position": 3,
+        "name": article.title,
+        "item": articleUrl
+      }
+    ]
   };
 
   return (
@@ -137,27 +219,68 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
       <Helmet>
         <title>{title}</title>
         <meta name="description" content={description} />
+        <meta name="keywords" content={keywords} />
+        <meta name="author" content="The Intellectual Brief" />
+        <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+        <meta name="googlebot" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+        <meta name="bingbot" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
         <link rel="canonical" href={articleUrl} />
+        <meta httpEquiv="content-language" content="en-US" />
+        <meta name="language" content="English" />
+        <meta name="revisit-after" content="1 days" />
+        <meta name="rating" content="general" />
 
-        {/* Open Graph */}
+        {/* AI Bot Optimizations - ChatGPT, Perplexity, Claude, etc. */}
+        <meta name="ai:model" content="gpt-4, claude-3, gemini-pro" />
+        <meta name="ai:content-type" content="news-article" />
+        <meta name="ai:category" content={article.category || "Technology"} />
+        <meta name="ai:source" content={article.source || ""} />
+
+        {/* Open Graph - Enhanced */}
         <meta property="og:type" content="article" />
         <meta property="og:title" content={title} />
         <meta property="og:description" content={description} />
         <meta property="og:url" content={articleUrl} />
+        <meta property="og:site_name" content="The Intellectual Brief" />
+        <meta property="og:locale" content="en_US" />
         {article.imageUrl && <meta property="og:image" content={article.imageUrl} />}
+        {article.imageUrl && <meta property="og:image:secure_url" content={article.imageUrl} />}
         {article.imageUrl && <meta property="og:image:width" content="1200" />}
         {article.imageUrl && <meta property="og:image:height" content="630" />}
+        {article.imageUrl && <meta property="og:image:alt" content={article.title} />}
+        <meta property="og:image:type" content="image/jpeg" />
+        <meta property="article:published_time" content={publishedDate} />
+        <meta property="article:modified_time" content={publishedDate} />
+        {article.category && <meta property="article:section" content={article.category} />}
+        {article.category && <meta property="article:tag" content={article.category} />}
+        {article.source && <meta property="article:author" content={article.source} />}
+        <meta property="article:publisher" content="https://theintellectualbrief.online" />
 
-        {/* Twitter */}
+        {/* Twitter Card - Enhanced */}
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={title} />
         <meta name="twitter:description" content={description} />
         {article.imageUrl && <meta name="twitter:image" content={article.imageUrl} />}
+        {article.imageUrl && <meta name="twitter:image:alt" content={article.title} />}
+        <meta name="twitter:site" content="@TIBReports" />
+        <meta name="twitter:creator" content="@TIBReports" />
+        <meta name="twitter:label1" content="Reading time" />
+        <meta name="twitter:data1" content={`${Math.ceil(wordCount / 200)} min read`} />
+        {article.category && <meta name="twitter:label2" content="Category" />}
+        {article.category && <meta name="twitter:data2" content={article.category} />}
 
-        {/* Article specific */}
-        <meta property="article:published_time" content={new Date().toISOString()} />
-        {article.category && <meta property="article:section" content={article.category} />}
-        {article.source && <meta property="article:author" content={article.source} />}
+        {/* Additional Meta Tags */}
+        <meta name="news_keywords" content={keywords} />
+        <meta name="article:opinion" content="false" />
+        <meta name="article:content_tier" content="free" />
+
+        {/* Structured Data - Updated when content loads */}
+        <script type="application/ld+json">
+          {JSON.stringify(articleLd)}
+        </script>
+        <script type="application/ld+json">
+          {JSON.stringify(breadcrumbLd)}
+        </script>
       </Helmet>
 
       <div className="min-h-screen bg-paper dark:bg-paper-dark overflow-y-auto animate-fade-in">
@@ -216,7 +339,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
               </span>
             </div>
 
-            <h1 className="text-3xl md:text-5xl lg:text-6xl font-serif font-medium text-neutral-900 dark:text-neutral-100 leading-[1.1] mb-8">
+            <h1 className="text-3xl md:text-5xl lg:text-6xl font-serif font-medium text-neutral-900 dark:text-neutral-100 leading-[1.1] mb-8" itemProp="headline">
               {article.title}
             </h1>
 
@@ -244,9 +367,13 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
             <div className="w-full aspect-[21/9] mb-12 overflow-hidden bg-neutral-100 dark:bg-neutral-900 shadow-sm animate-fade-in">
               <img
                 src={article.imageUrl}
-                alt={article.title}
+                alt={`${article.title} - Featured image from ${article.source}`}
+                title={article.title}
                 className="w-full h-full object-cover"
                 onError={() => setImageError(true)}
+                loading="eager"
+                fetchPriority="high"
+                itemProp="image"
               />
             </div>
           ) : (
@@ -256,8 +383,8 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
           )}
 
           {/* Article Body */}
-          <div className="prose prose-lg prose-neutral dark:prose-invert max-w-none font-serif leading-loose">
-            <p className="lead text-xl md:text-2xl text-neutral-800 dark:text-neutral-200 italic font-medium mb-12 leading-relaxed">
+          <article className="prose prose-lg prose-neutral dark:prose-invert max-w-none font-serif leading-loose" itemScope itemType="https://schema.org/NewsArticle">
+            <p className="lead text-xl md:text-2xl text-neutral-800 dark:text-neutral-200 italic font-medium mb-12 leading-relaxed" itemProp="description">
               {article.summary}
             </p>
 
@@ -279,12 +406,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
                 </div>
               </div>
             ) : (
-              <div className="markdown-body text-neutral-900 dark:text-neutral-300 animate-fade-in">
-                {/* NewsArticle JSON-LD for this specific story */}
-                <script
-                  type="application/ld+json"
-                  dangerouslySetInnerHTML={{ __html: JSON.stringify(articleLd) }}
-                />
+              <div className="markdown-body text-neutral-900 dark:text-neutral-300 animate-fade-in" itemProp="articleBody">
                 <ReactMarkdown
                   components={{
                     h1: ({ node, ...props }) => (
@@ -342,7 +464,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
                 </ReactMarkdown>
               </div>
             )}
-          </div>
+          </article>
 
           <div className="mt-24 pt-12 border-t border-neutral-200 dark:border-neutral-800 flex flex-col items-center text-center">
             <img src={logo} alt="Logo" className="w-10 h-10 object-contain mb-10" />

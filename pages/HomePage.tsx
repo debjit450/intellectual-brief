@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { Helmet } from 'react-helmet-async';
 import Navbar from '../components/Navbar';
 import Sidebar from '../components/Sidebar';
 import NewsFeed from '../components/NewsFeed';
@@ -134,8 +135,38 @@ const HomePage: React.FC = () => {
     );
   };
 
+  // Generate dynamic meta based on category and search
+  const pageTitle = searchQuery 
+    ? `Search: ${searchQuery} • The Intellectual Brief`
+    : activeCategory !== 'Technology'
+    ? `${activeCategory} • The Intellectual Brief`
+    : 'The Intellectual Brief – Clarity in a noisy world.';
+  
+  const pageDescription = searchQuery
+    ? `Search results for "${searchQuery}" on The Intellectual Brief. Find curated tech, AI, markets, and policy news.`
+    : activeCategory !== 'Technology'
+    ? `Latest ${activeCategory} news and analysis from The Intellectual Brief. Executive-ready briefings for decision-makers.`
+    : 'Essential reading for the modern visionary. Curated tech, AI, markets, and policy news, plus AI-generated briefings.';
+  
+  const canonicalUrl = typeof window !== 'undefined'
+    ? `${window.location.origin}${window.location.pathname}${window.location.search}`
+    : `https://theintellectualbrief.online/${searchQuery || activeCategory !== 'Technology' ? '?' : ''}${searchQuery ? `q=${encodeURIComponent(searchQuery)}` : ''}${activeCategory !== 'Technology' ? `category=${encodeURIComponent(activeCategory)}` : ''}`;
+
   return (
     <div className="min-h-screen bg-paper dark:bg-paper-dark font-sans text-ink dark:text-ink-dark transition-colors duration-500">
+      <Helmet>
+        <title>{pageTitle}</title>
+        <meta name="description" content={pageDescription} />
+        <link rel="canonical" href={canonicalUrl} />
+        <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+        <meta property="og:title" content={pageTitle} />
+        <meta property="og:description" content={pageDescription} />
+        <meta property="og:url" content={canonicalUrl} />
+        <meta property="og:type" content="website" />
+        {activeCategory && <meta property="article:section" content={activeCategory} />}
+        {searchQuery && <meta name="robots" content="noindex, follow" />}
+      </Helmet>
+      
       <Navbar
         onSearch={handleSearch}
         onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)}

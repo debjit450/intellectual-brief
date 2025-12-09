@@ -23,15 +23,36 @@
   <meta name="description"
     content="The Intellectual Brief curates global developments across markets, technology, policy, science, and society, transforming noise into strategic clarity powered by AI for decision-makers and high-intent learners." />
   <meta name="keywords"
-    content="technology news, AI news, artificial intelligence, startups, venture capital, markets, policy, tech business, The Intellectual Brief" />
-  <meta name="robots" content="index,follow,max-image-preview:large" />
-  <meta name="googlebot" content="index,follow" />
+    content="technology news, AI news, artificial intelligence, startups, venture capital, markets, policy, tech business, The Intellectual Brief, executive briefings, business intelligence, tech analysis" />
+  <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+  <meta name="googlebot" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+  <meta name="bingbot" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+  <meta name="slurp" content="index, follow" />
+  <meta name="duckduckbot" content="index, follow" />
+  <meta name="baiduspider" content="index, follow" />
+  <meta name="yandex" content="index, follow" />
   <meta name="theme-color" content="#141414" />
+  <meta name="author" content="The Intellectual Brief" />
+  <meta name="language" content="English" />
+  <meta name="revisit-after" content="1 days" />
+  <meta httpEquiv="content-language" content="en-US" />
+  
+  <!-- AI Bot Optimizations -->
+  <meta name="ai:model" content="gpt-4, claude-3, gemini-pro, perplexity" />
+  <meta name="ai:content-type" content="news-website" />
+  <meta name="ai:indexing" content="enabled" />
+  
+  <!-- Performance Hints -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="dns-prefetch" href="https://pagead2.googlesyndication.com" />
+  <link rel="dns-prefetch" href="https://www.google-analytics.com" />
 
   <!-- Canonical will be set dynamically per page via Helmet -->
 
   <!-- Open Graph / Facebook -->
   <meta property="og:locale" content="en_US" />
+  <meta property="og:locale:alternate" content="en_GB" />
   <meta property="og:type" content="website" />
   <meta property="og:title" content="The Intellectual Brief – Clarity in a noisy world." />
   <meta property="og:description"
@@ -39,8 +60,11 @@
   <meta property="og:url" content="https://theintellectualbrief.online/" />
   <meta property="og:site_name" content="The Intellectual Brief" />
   <meta property="og:image" content="https://theintellectualbrief.online/og-cover.jpg" />
+  <meta property="og:image:secure_url" content="https://theintellectualbrief.online/og-cover.jpg" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
+  <meta property="og:image:type" content="image/jpeg" />
+  <meta property="og:image:alt" content="The Intellectual Brief - Technology and Business Intelligence" />
 
   <!-- Twitter -->
   <meta name="twitter:card" content="summary_large_image" />
@@ -57,17 +81,38 @@
     "@context": "https://schema.org",
     "@type": "NewsMediaOrganization",
     "name": "The Intellectual Brief",
+    "alternateName": "TIB",
     "url": "https://theintellectualbrief.online/",
     "logo": {
       "@type": "ImageObject",
-      "url": "https://theintellectualbrief.online/logo.png"
+      "url": "https://theintellectualbrief.online/assets/logo.png",
+      "width": 512,
+      "height": 512
     },
-    "description": "A modern tech and business intelligence brief covering AI, startups, markets, and policy.",
+    "description": "A modern tech and business intelligence brief covering AI, startups, markets, and policy. Executive-ready briefings for decision-makers.",
+    "foundingDate": "2024",
     "sameAs": [
       "https://www.instagram.com/theintellectualbrief",
       "https://www.youtube.com/@theintellectualbrief",
       "https://x.com/TIBReports",
       "https://www.linkedin.com/company/theintellectualbrief"
+    ],
+    "contactPoint": {
+      "@type": "ContactPoint",
+      "contactType": "Customer Service",
+      "availableLanguage": ["English"]
+    },
+    "areaServed": {
+      "@type": "Place",
+      "name": "Worldwide"
+    },
+    "knowsAbout": [
+      "Technology",
+      "Artificial Intelligence",
+      "Business",
+      "Venture Capital",
+      "Markets",
+      "Policy"
     ]
   }
   </script>
@@ -78,18 +123,46 @@
     "@context": "https://schema.org",
     "@type": "WebSite",
     "name": "The Intellectual Brief",
+    "alternateName": "TIB",
     "url": "https://theintellectualbrief.online/",
+    "description": "Essential reading for the modern visionary. Curated tech, AI, markets, and policy news, plus AI-generated briefings.",
+    "inLanguage": "en-US",
+    "isAccessibleForFree": true,
     "potentialAction": {
       "@type": "SearchAction",
-      "target": "https://theintellectualbrief.online/search?q={search_term_string}",
+      "target": {
+        "@type": "EntryPoint",
+        "urlTemplate": "https://theintellectualbrief.online/?q={search_term_string}"
+      },
       "query-input": "required name=search_term_string"
+    },
+    "publisher": {
+      "@type": "NewsMediaOrganization",
+      "name": "The Intellectual Brief"
+    }
+  }
+  </script>
+  
+  <!-- Structured Data: CollectionPage for homepage -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "CollectionPage",
+    "name": "The Intellectual Brief - Latest News",
+    "url": "https://theintellectualbrief.online/",
+    "description": "Latest technology, AI, business, and policy news curated for executives and decision-makers.",
+    "isPartOf": {
+      "@type": "WebSite",
+      "name": "The Intellectual Brief",
+      "url": "https://theintellectualbrief.online/"
     }
   }
   </script>
 
+  <!-- RSS Feed -->
+  <link rel="alternate" type="application/rss+xml" title="The Intellectual Brief RSS Feed" href="https://theintellectualbrief.online/rss.xml" />
+  
   <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
     href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=JetBrains+Mono:wght@400&display=swap"
     rel="stylesheet">

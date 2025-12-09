@@ -5,6 +5,7 @@ import { AuthProvider } from './context/AuthContext';
 import { Analytics } from "@vercel/analytics/react";
 import HomePage from './pages/HomePage';
 import ArticlePage from './pages/ArticlePage';
+import RSSPage from './pages/RSSPage';
 import NotFound from './pages/NotFound';
 
 const App: React.FC = () => {
@@ -15,6 +16,7 @@ const App: React.FC = () => {
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/article/:slug" element={<ArticlePage />} />
+            <Route path="/rss.xml" element={<RSSPage />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
           <Analytics />
