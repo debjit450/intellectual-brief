@@ -14,6 +14,7 @@ import {
   Moon,
   Clock,
   ArrowUpRight,
+  ArrowLeft,
   Briefcase,
   Cpu,
   TrendingUp,
@@ -112,6 +113,8 @@ export const Icons = {
   Moon,
   Clock,
   ArrowUpRight,
+  ArrowLeft,
+  Home,
 };
 
 export const AD_CONFIG = {

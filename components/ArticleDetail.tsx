@@ -6,6 +6,7 @@ import { Icons, TBLogo } from '../constants.tsx';
 import ReactMarkdown from 'react-markdown';
 import logo from '/assets/logo.png';
 import { generateSlug } from '../utils/slug';
+import { storeArticle } from '../utils/articleStorage';
 
 interface ArticleDetailProps {
   article: Article;
@@ -29,6 +30,9 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
 
   useEffect(() => {
     let isMounted = true;
+
+    // Store article in localStorage for later retrieval by shared links
+    storeArticle(article);
 
     // Don't lock body scroll when used as a route component
     // Only lock if it's being used as a modal (check if onClose navigates)
@@ -352,4 +356,4 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
   );
 };
 
-      export default ArticleDetail;
+export default ArticleDetail;

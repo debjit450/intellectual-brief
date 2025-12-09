@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Article } from '../types';
-import { generateSlug } from '../utils/slug';
+import { generateSlug, extractIdFromSlug } from '../utils/slug';
 import { fetchNews } from '../services/newsService';
 import ArticleDetail from '../components/ArticleDetail';
 import SmartLoader from '../components/SmartLoader';
 import { TBLogo } from '../constants.tsx';
+import { getArticleById, getAllCachedArticles } from '../utils/articleStorage';
 
 const ArticlePage: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
@@ -31,47 +32,61 @@ const ArticlePage: React.FC = () => {
       setError(false);
 
       try {
-        // Extract ID from slug if present (last 8+ characters after final hyphen)
-        const idMatch = slug.match(/-([a-z0-9]{8,})$/);
-        const articleId = idMatch ? idMatch[1] : null;
-
-        // Try to fetch articles from categories, starting with Technology (most common)
-        const categories: Array<'Technology' | 'Business' | 'Artificial Intelligence' | 'Venture Capital' | 'Markets' | 'Policy'> = [
-          'Technology',
-          'Business',
-          'Artificial Intelligence',
-          'Venture Capital',
-          'Markets',
-          'Policy'
-        ];
+        // Extract ID from slug if present
+        const articleId = extractIdFromSlug(slug);
 
         let foundArticle: Article | null = null;
 
-        // Search through categories
-        for (const category of categories) {
-          try {
-            const response = await fetchNews(category);
-            
-            // First try to match by ID if we have it
-            if (articleId) {
-              const idMatch = response.articles.find((a) => a.id === articleId);
-              if (idMatch) {
-                foundArticle = idMatch;
+        // First, try to get from localStorage cache
+        if (articleId) {
+          foundArticle = getArticleById(articleId);
+        }
+
+        // If not in cache, try to match by slug in all cached articles
+        if (!foundArticle) {
+          const cachedArticles = getAllCachedArticles();
+          foundArticle = cachedArticles.find(
+            (a) => generateSlug(a.title, a.id) === slug
+          ) || null;
+        }
+
+        // If still not found, try fetching from API
+        if (!foundArticle) {
+          const categories: Array<'Technology' | 'Business' | 'Artificial Intelligence' | 'Venture Capital' | 'Markets' | 'Policy'> = [
+            'Technology',
+            'Business',
+            'Artificial Intelligence',
+            'Venture Capital',
+            'Markets',
+            'Policy'
+          ];
+
+          // Search through categories
+          for (const category of categories) {
+            try {
+              const response = await fetchNews(category);
+              
+              // First try to match by ID if we have it
+              if (articleId) {
+                const idMatch = response.articles.find((a) => a.id === articleId);
+                if (idMatch) {
+                  foundArticle = idMatch;
+                  break;
+                }
+              }
+              
+              // Then try to match by slug
+              const slugMatch = response.articles.find(
+                (a) => generateSlug(a.title, a.id) === slug
+              );
+              if (slugMatch) {
+                foundArticle = slugMatch;
                 break;
               }
+            } catch (e) {
+              // Continue to next category
+              console.warn(`Failed to fetch ${category}:`, e);
             }
-            
-            // Then try to match by slug
-            const slugMatch = response.articles.find(
-              (a) => generateSlug(a.title, a.id) === slug
-            );
-            if (slugMatch) {
-              foundArticle = slugMatch;
-              break;
-            }
-          } catch (e) {
-            // Continue to next category
-            console.warn(`Failed to fetch ${category}:`, e);
           }
         }
 

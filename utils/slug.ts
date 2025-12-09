@@ -38,6 +38,13 @@ export function generateSlug(title: string, id?: string): string {
  * @returns The article ID if found, null otherwise
  */
 export function extractIdFromSlug(slug: string): string | null {
+  // Try to match ID at the end (8+ characters after final hyphen)
+  const idMatch = slug.match(/-([a-z0-9]{8,})$/);
+  if (idMatch && idMatch[1]) {
+    return idMatch[1];
+  }
+  
+  // Fallback: check last part if it's exactly 8 characters (common case)
   const parts = slug.split('-');
   const lastPart = parts[parts.length - 1];
   
