@@ -1,6 +1,6 @@
 import { Article, Category, NewsResponse } from "../types";
 
-const NEWS_API_KEY = "pub_78a78ba36de8425ab21d430ba19f0a3d";
+const NEWS_API_KEY = "pub_a8b20df5d4784922a5c0ec3d23578d6f";
 const BASE_URL = "https://newsdata.io/api/1/latest";
 
 const NEWS_CACHE_PREFIX = "tib_news_cache_v1";
