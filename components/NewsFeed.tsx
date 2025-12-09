@@ -96,7 +96,13 @@ const NewsFeed: React.FC<NewsFeedProps> = ({ activeCategory, searchQuery, onSele
           <div className="w-full h-px bg-neutral-200 dark:bg-neutral-800" />
 
           {/* Ad Unit */}
-          <AdUnit slot={AD_CONFIG.slots.feed} className="w-full border-none bg-transparent my-0" />
+          <AdUnit 
+            slot={AD_CONFIG.slots.feed} 
+            format="horizontal"
+            className="w-full" 
+            lazy={true}
+            minHeight="250px"
+          />
 
           {/* Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-12 gap-y-16 md:gap-y-20">

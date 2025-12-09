@@ -12,3 +12,37 @@
   box-shadow: none !important;
   background: transparent !important;
 }
+
+/* AdSense Ad Container Optimizations */
+.adsbygoogle {
+  display: block !important;
+  text-align: center;
+}
+
+/* Prevent layout shift during ad load */
+ins.adsbygoogle[data-ad-status="unfilled"] {
+  display: none !important;
+}
+
+/* Ensure ads don't overflow on mobile */
+.adsbygoogle {
+  max-width: 100%;
+  overflow: hidden;
+}
+
+/* Smooth ad appearance */
+.adsbygoogle[data-ad-status="filled"] {
+  animation: fadeIn 0.3s ease-in;
+}
+
+/* Mobile ad optimization */
+@media (max-width: 768px) {
+  .adsbygoogle {
+    min-height: 100px;
+  }
+}
+
+/* Ensure proper spacing around ads */
+.adsbygoogle + .adsbygoogle {
+  margin-top: 1rem;
+}

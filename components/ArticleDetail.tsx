@@ -2,11 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { Article } from '../types';
 import { generateFullArticle } from '../services/geminiService';
-import { Icons, TBLogo } from '../constants.tsx';
+import { Icons, TBLogo, AD_CONFIG } from '../constants.tsx';
 import ReactMarkdown from 'react-markdown';
 import logo from '/assets/logo.png';
 import { generateSlug } from '../utils/slug';
 import { storeArticle } from '../utils/articleStorage';
+import AdUnit from './AdUnit';
 
 interface ArticleDetailProps {
   article: Article;
@@ -343,19 +344,22 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
               {article.title}
             </h1>
 
-            <div className="flex items-center justify-center gap-4 text-xs text-neutral-400 font-mono uppercase tracking-widest">
+            <div className="flex items-center justify-center gap-4 text-xs text-neutral-400 font-mono uppercase tracking-widest flex-wrap">
               <span className="flex items-center gap-2">
                 <Icons.Clock className="w-3 h-3" /> {article.timestamp}
               </span>
 
-              {article.countryName && (
+              {(article.countryCode || article.countryName) && (
                 <span className="flex items-center gap-2">
-                  {/* You can swap this for a Globe icon if you have one */}
                   <span className="w-1 h-1 rounded-full bg-neutral-400" />
-                  <span>
+                  <span className="px-2 py-0.5 bg-primary/10 dark:bg-primary/20 text-primary border border-primary/20 rounded text-[10px] font-medium">
                     {article.countryCode === "us"
                       ? "US"
-                      : article.countryName}
+                      : article.countryCode === "gb"
+                        ? "UK"
+                        : article.countryCode === "in"
+                          ? "IN"
+                          : article.countryName || article.countryCode?.toUpperCase()}
                   </span>
                 </span>
               )}
@@ -388,6 +392,15 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
               {article.summary}
             </p>
 
+            {/* First In-Content Ad - After Summary */}
+            <AdUnit
+              slot={AD_CONFIG.slots.articleTop}
+              format="horizontal"
+              className="my-12"
+              lazy={true}
+              minHeight="250px"
+            />
+
             <div className="flex items-center justify-center my-12 opacity-30">
               <div className="w-16 h-px bg-neutral-400"></div>
               <div className="px-4">
@@ -406,64 +419,86 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
                 </div>
               </div>
             ) : (
-              <div className="markdown-body text-neutral-900 dark:text-neutral-300 animate-fade-in" itemProp="articleBody">
-                <ReactMarkdown
-                  components={{
-                    h1: ({ node, ...props }) => (
-                      <h2
-                        className="text-2xl md:text-3xl font-medium mt-16 mb-6 font-serif text-ink dark:text-ink-dark"
-                        {...props}
-                      />
-                    ),
-                    h2: ({ node, ...props }) => (
-                      <h2
-                        className="text-xl md:text-2xl font-medium mt-16 mb-6 font-serif border-b border-neutral-200 dark:border-neutral-800 pb-3"
-                        {...props}
-                      />
-                    ),
-                    h3: ({ node, ...props }) => (
-                      <h3
-                        className="text-lg md:text-xl font-medium mt-10 mb-4 font-serif text-primary"
-                        {...props}
-                      />
-                    ),
-                    p: ({ node, ...props }) => (
-                      <p
-                        className="mb-6 font-serif text-lg md:text-xl leading-[1.8] text-neutral-700 dark:text-neutral-300"
-                        {...props}
-                      />
-                    ),
-                    ul: ({ node, ...props }) => (
-                      <ul className="list-none pl-0 mb-8 space-y-4" {...props} />
-                    ),
-                    li: ({ node, ...props }) => (
-                      <li
-                        className="flex gap-4 text-lg md:text-xl font-serif text-neutral-700 dark:text-neutral-300"
-                        {...props}
-                      >
-                        <span className="text-primary mt-1.5 text-xs">◆</span>
-                        <span>{props.children}</span>
-                      </li>
-                    ),
-                    strong: ({ node, ...props }) => (
-                      <strong
-                        className="font-bold text-neutral-900 dark:text-white"
-                        {...props}
-                      />
-                    ),
-                    blockquote: ({ node, ...props }) => (
-                      <blockquote
-                        className="border-l-2 border-primary pl-6 my-8 italic text-neutral-600 dark:text-neutral-400 text-xl"
-                        {...props}
-                      />
-                    )
-                  }}
-                >
-                  {fullContent ||
-                    "## Service Temporarily Unavailable\n\nThe dispatch for this topic cannot be retrieved at this moment. Please verify the connection or consult the original source directly."}
-                </ReactMarkdown>
-              </div>
+              <>
+                <div className="markdown-body text-neutral-900 dark:text-neutral-300 animate-fade-in" itemProp="articleBody">
+                  <ReactMarkdown
+                    components={{
+                      h1: ({ node, ...props }) => (
+                        <h2
+                          className="text-2xl md:text-3xl font-medium mt-16 mb-6 font-serif text-ink dark:text-ink-dark"
+                          {...props}
+                        />
+                      ),
+                      h2: ({ node, ...props }) => (
+                        <h2
+                          className="text-xl md:text-2xl font-medium mt-16 mb-6 font-serif border-b border-neutral-200 dark:border-neutral-800 pb-3"
+                          {...props}
+                        />
+                      ),
+                      h3: ({ node, ...props }) => (
+                        <h3
+                          className="text-lg md:text-xl font-medium mt-10 mb-4 font-serif text-primary"
+                          {...props}
+                        />
+                      ),
+                      p: ({ node, ...props }) => (
+                        <p
+                          className="mb-6 font-serif text-lg md:text-xl leading-[1.8] text-neutral-700 dark:text-neutral-300"
+                          {...props}
+                        />
+                      ),
+                      ul: ({ node, ...props }) => (
+                        <ul className="list-none pl-0 mb-8 space-y-4" {...props} />
+                      ),
+                      li: ({ node, ...props }) => (
+                        <li
+                          className="flex gap-4 text-lg md:text-xl font-serif text-neutral-700 dark:text-neutral-300"
+                          {...props}
+                        >
+                          <span className="text-primary mt-1.5 text-xs">◆</span>
+                          <span>{props.children}</span>
+                        </li>
+                      ),
+                      strong: ({ node, ...props }) => (
+                        <strong
+                          className="font-bold text-neutral-900 dark:text-white"
+                          {...props}
+                        />
+                      ),
+                      blockquote: ({ node, ...props }) => (
+                        <blockquote
+                          className="border-l-2 border-primary pl-6 my-8 italic text-neutral-600 dark:text-neutral-400 text-xl"
+                          {...props}
+                        />
+                      )
+                    }}
+                  >
+                    {fullContent ||
+                      "## Service Temporarily Unavailable\n\nThe dispatch for this topic cannot be retrieved at this moment. Please verify the connection or consult the original source directly."}
+                  </ReactMarkdown>
+                </div>
+
+                {/* Middle In-Content Ad - Only show if content is substantial */}
+                {fullContent && fullContent.length > 1500 && (
+                  <AdUnit
+                    slot={AD_CONFIG.slots.articleMiddle}
+                    format="rectangle"
+                    className="my-16"
+                    lazy={true}
+                    minHeight="250px"
+                  />
+                )}
+              </>
             )}
+
+            {/* Bottom Ad - Before Footer */}
+            <AdUnit
+              slot={AD_CONFIG.slots.articleBottom}
+              format="horizontal"
+              className="my-16"
+              lazy={true}
+              minHeight="250px"
+            />
           </article>
 
           <div className="mt-24 pt-12 border-t border-neutral-200 dark:border-neutral-800 flex flex-col items-center text-center">

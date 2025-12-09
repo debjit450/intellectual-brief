@@ -102,7 +102,10 @@ const Sidebar: React.FC<SidebarProps> = ({
       <div className="mt-auto pb-8 pr-6">
         <AdUnit
           slot={AD_CONFIG.slots.sidebar}
-          className="w-full opacity-60 hover:opacity-100 transition-opacity"
+          format="vertical"
+          className="w-full"
+          lazy={true}
+          minHeight="600px"
         />
 
         <div className="mt-8 pt-6 border-t border-neutral-200 dark:border-neutral-800">

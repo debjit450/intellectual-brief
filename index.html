@@ -45,8 +45,13 @@
   <!-- Performance Hints -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="preconnect" href="https://pagead2.googlesyndication.com" />
+  <link rel="preconnect" href="https://googleads.g.doubleclick.net" />
+  <link rel="preconnect" href="https://tpc.googlesyndication.com" />
   <link rel="dns-prefetch" href="https://pagead2.googlesyndication.com" />
   <link rel="dns-prefetch" href="https://www.google-analytics.com" />
+  <link rel="dns-prefetch" href="https://googleads.g.doubleclick.net" />
+  <link rel="dns-prefetch" href="https://tpc.googlesyndication.com" />
 
   <!-- Canonical will be set dynamically per page via Helmet -->
 
@@ -169,6 +174,14 @@
   <!-- Google AdSense -->
   <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4286398875959777"
     crossorigin="anonymous"></script>
+  
+  <!-- Google AdSense Auto Ads -->
+  <script>
+    (adsbygoogle = window.adsbygoogle || []).push({
+      google_ad_client: "ca-pub-4286398875959777",
+      enable_page_level_ads: true
+    });
+  </script>
 
   <script>
     tailwind.config = {
@@ -242,6 +255,25 @@
     ::selection {
       background: #C5A059;
       color: #fff;
+    }
+
+    /* AdSense optimization - prevent layout shift */
+    ins.adsbygoogle {
+      display: block;
+      text-align: center;
+    }
+
+    /* Ensure ads are responsive */
+    .adsbygoogle {
+      max-width: 100%;
+      overflow: hidden;
+    }
+
+    /* Mobile ad optimization */
+    @media (max-width: 768px) {
+      .adsbygoogle {
+        min-height: 100px;
+      }
     }
   </style>
 

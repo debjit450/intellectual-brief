@@ -4,6 +4,15 @@ import { Article } from '../types';
 import { Icons, TBLogo } from '../constants.tsx';
 import { generateSlug } from '../utils/slug';
 
+// Helper function to format country display
+const formatCountry = (countryCode?: string, countryName?: string): string | null => {
+  if (!countryCode && !countryName) return null;
+  if (countryCode === 'us') return 'US';
+  if (countryCode === 'gb') return 'UK';
+  if (countryCode === 'in') return 'IN';
+  return countryName || countryCode?.toUpperCase() || null;
+};
+
 interface ArticleCardProps {
   article: Article;
   onSelect?: (article: Article) => void;
@@ -48,8 +57,16 @@ const ArticleCard: React.FC<ArticleCardProps> = ({
         </div>
 
         <div className="flex flex-col gap-4 max-w-4xl mx-auto md:mx-0">
-           <div className="flex items-center gap-3 text-[10px] uppercase tracking-[0.25em] font-medium text-primary">
+           <div className="flex items-center gap-3 text-[10px] uppercase tracking-[0.25em] font-medium text-primary flex-wrap">
               <span>{article.source}</span>
+              {formatCountry(article.countryCode, article.countryName) && (
+                <>
+                  <span className="w-px h-3 bg-neutral-300 dark:bg-neutral-700"></span>
+                  <span className="px-2 py-0.5 bg-primary/10 dark:bg-primary/20 text-primary border border-primary/20 rounded">
+                    {formatCountry(article.countryCode, article.countryName)}
+                  </span>
+                </>
+              )}
               <span className="w-px h-3 bg-neutral-300 dark:bg-neutral-700"></span>
               <span className="text-neutral-500 dark:text-neutral-400">{article.timestamp}</span>
            </div>
@@ -86,13 +103,20 @@ const ArticleCard: React.FC<ArticleCardProps> = ({
       className="group flex flex-col h-full cursor-pointer pb-10 border-b border-neutral-200 dark:border-neutral-800 last:border-0 md:border-none block"
     >
       <div className="flex flex-col gap-3 mb-4">
-        <div className="flex items-center justify-between">
-           <span className="text-[9px] uppercase tracking-[0.2em] font-medium text-primary">
-             {article.source}
-           </span>
+        <div className="flex items-center justify-between gap-2">
+           <div className="flex items-center gap-2 flex-wrap">
+             <span className="text-[9px] uppercase tracking-[0.2em] font-medium text-primary">
+               {article.source}
+             </span>
+             {formatCountry(article.countryCode, article.countryName) && (
+               <span className="px-1.5 py-0.5 bg-primary/10 dark:bg-primary/20 text-primary text-[8px] uppercase tracking-[0.15em] border border-primary/20 rounded">
+                 {formatCountry(article.countryCode, article.countryName)}
+               </span>
+             )}
+           </div>
            <button 
               onClick={(e) => { e.stopPropagation(); onToggleBookmark(article.id); }}
-              className="text-neutral-300 hover:text-primary transition-colors"
+              className="text-neutral-300 hover:text-primary transition-colors flex-shrink-0"
            >
               <Icons.Bookmark className={`w-4 h-4 ${isBookmarked ? 'fill-current' : ''}`} />
            </button>

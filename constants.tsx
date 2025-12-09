@@ -122,5 +122,8 @@ export const AD_CONFIG = {
   slots: {
     sidebar: '1234567890',
     feed: '0987654321',
+    articleTop: '1234567890', // After summary
+    articleMiddle: '0987654321', // In-content
+    articleBottom: '1234567890', // Before footer
   },
 };
