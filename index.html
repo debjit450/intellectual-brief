@@ -4,7 +4,78 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
-  <title>The Intellectual Brief</title>
+
+  <title>The Intellectual Brief – Clarity in a noisy world.</title>
+
+  <!-- Primary SEO -->
+  <meta name="description"
+    content="The Intellectual Brief is a modern tech and business intelligence brief, delivering curated news, AI-powered analysis, and market insights for founders, operators, and investors." />
+  <meta name="keywords"
+    content="technology news, AI news, artificial intelligence, startups, venture capital, markets, policy, tech business, The Intellectual Brief" />
+  <meta name="robots" content="index,follow,max-image-preview:large" />
+  <meta name="googlebot" content="index,follow" />
+  <meta name="theme-color" content="#141414" />
+
+  <!-- Canonical (update this when you have the real domain) -->
+  <link rel="canonical" href="https://theintellectualbrief.online/" />
+
+  <!-- Open Graph / Facebook -->
+  <meta property="og:locale" content="en_US" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="The Intellectual Brief – Clarity in a noisy world." />
+  <meta property="og:description"
+    content="Essential reading for the modern visionary. Curated tech, AI, markets, and policy news, plus AI-generated briefings." />
+  <meta property="og:url" content="https://theintellectualbrief.online/" />
+  <meta property="og:site_name" content="The Intellectual Brief" />
+  <meta property="og:image" content="https://theintellectualbrief.online/og-cover.jpg" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="The Intellectual Brief – Clarity in a noisy world." />
+  <meta name="twitter:description"
+    content="Curated tech, AI, venture capital, and market news with executive-ready briefings." />
+  <meta name="twitter:image" content="https://theintellectualbrief.online/og-cover.jpg" />
+  <meta name="twitter:site" content="@theintellectualbrief" />
+  <meta name="twitter:creator" content="@theintellectualbrief" />
+
+  <!-- Structured Data: Organization / NewsMediaOrganization -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "NewsMediaOrganization",
+    "name": "The Intellectual Brief",
+    "url": "https://theintellectualbrief.online/",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://theintellectualbrief.online/logo.png"
+    },
+    "description": "A modern tech and business intelligence brief covering AI, startups, markets, and policy.",
+    "sameAs": [
+      "https://www.instagram.com/theintellectualbrief",
+      "https://www.youtube.com/@theintellectualbrief",
+      "https://x.com/TIBReports",
+      "https://www.linkedin.com/company/theintellectualbrief"
+    ]
+  }
+  </script>
+
+  <!-- Structured Data: WebSite with SearchAction -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "name": "The Intellectual Brief",
+    "url": "https://theintellectualbrief.online/",
+    "potentialAction": {
+      "@type": "SearchAction",
+      "target": "https://theintellectualbrief.online/search?q={search_term_string}",
+      "query-input": "required name=search_term_string"
+    }
+  }
+  </script>
+
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -14,6 +85,7 @@
   <!-- Google AdSense -->
   <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4286398875959777"
     crossorigin="anonymous"></script>
+
   <script>
     tailwind.config = {
       darkMode: 'class',
@@ -26,16 +98,16 @@
           },
           colors: {
             primary: {
-              DEFAULT: '#C5A059', // Antique Gold
+              DEFAULT: '#C5A059',
               dark: '#9F803C',
               light: '#E5C585'
             },
             paper: {
-              DEFAULT: '#F9F9F7', // Editorial Cream
-              dark: '#141414'     // Deep Charcoal/Black
+              DEFAULT: '#F9F9F7',
+              dark: '#141414'
             },
             ink: {
-              DEFAULT: '#111111', // Almost Black
+              DEFAULT: '#111111',
               light: '#444444',
               dark: '#F0F0F0'
             }
@@ -58,6 +130,7 @@
       }
     }
   </script>
+
   <style>
     body {
       transition: background-color 0.4s ease, color 0.4s ease;
@@ -65,7 +138,6 @@
       -moz-osx-font-smoothing: grayscale;
     }
 
-    /* Elegant Scrollbar */
     ::-webkit-scrollbar {
       width: 4px;
     }
@@ -83,25 +155,12 @@
       background: #444;
     }
 
-    /* Selection Color */
     ::selection {
       background: #C5A059;
       color: #fff;
     }
   </style>
-  <script type="importmap">
-{
-  "imports": {
-    "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "react": "https://aistudiocdn.com/react@^19.2.0",
-    "react-router-dom": "https://aistudiocdn.com/react-router-dom@^7.9.6",
-    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.555.0",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
-    "react-markdown": "https://aistudiocdn.com/react-markdown@^10.1.0"
-  }
-}
-</script>
+
   <link rel="stylesheet" href="/index.css">
 </head>
 

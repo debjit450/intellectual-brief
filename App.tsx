@@ -7,7 +7,7 @@ import ArticleDetail from './components/ArticleDetail';
 import AuthModal from './components/AuthModal';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Category, Article } from './types';
-import { TBLogo } from './constants.tsx';
+import logo from '/assets/logo.png';
 import { Analytics } from "@vercel/analytics/react"
 
 const AppContent: React.FC = () => {
@@ -97,7 +97,7 @@ const AppContent: React.FC = () => {
           <footer className="border-t border-neutral-200 dark:border-neutral-800 py-20 text-center mt-20 bg-neutral-100 dark:bg-neutral-900/50">
             <div className="max-w-lg mx-auto px-6">
               <div className="mb-6 flex justify-center text-neutral-400">
-                <TBLogo className="w-10 h-10" />
+                <img src={logo} alt="Logo" className="w-10 h-10 object-contain" />
               </div>
               <p className="text-xl font-serif italic text-neutral-600 dark:text-neutral-400 mb-6">
                 "Knowledge is the new currency."
