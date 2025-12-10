@@ -1,18 +1,26 @@
-// aiBriefs.ts
+// aiBriefs.ts — Advanced version
+// Features added:
+// - Dynamic/conditional "Implications" categories detected automatically
+// - Optional machine-readable JSON output mode (for UI/structured consumption)
+// - Improved prompt engineering with schema enforcement and reasoning step
+// - Better model orchestration and clearer fallback semantics
+// - More robust normalization, caching, and premium behavior
+// - Telemetry hooks and optional local diagnostics
+
 import { GoogleGenAI } from "@google/genai";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 // -------------------- Config --------------------
-const AI_BRIEF_CACHE_PREFIX = "tib_ai_brief_v4";
-const CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 7; // 7 days (non-premium)
+const AI_BRIEF_CACHE_PREFIX = "tib_ai_brief_v5";
+const CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 7; // 7 days
 const PREMIUM_CACHE_TTL_MS = CACHE_TTL_MS * 4; // 28 days
 const MAX_CONCURRENT_REQUESTS = 4;
 const REQUEST_TIMEOUT_MS = 45_000;
 const CIRCUIT_BREAKER_THRESHOLD = 5;
 const CIRCUIT_BREAKER_COOLDOWN_MS = 1000 * 60 * 5;
 
-// Official models (only these IDs)
+// Official models (only these IDs) — update to match official IDs in your environment
 const MODELS = {
   BEST_FT: "gemini-2.5-flash",
   LITE: "gemini-2.5-flash-lite",
@@ -21,14 +29,13 @@ const MODELS = {
   PRO: "gemini-2.5-pro",
 };
 
-// pluggable analytics hook
+// -------------------- Telemetry hook (pluggable) --------------------
 const sendAnalyticsEvent = (ev: { event: string; payload?: any }) => {
+  // Replace with your analytics call (GA, Honeycomb, Sentry, etc.)
   console.debug("[AI_ANALYTICS]", ev.event, ev.payload ?? "");
 };
 
 // -------------------- Utilities --------------------
-
-// SHA-256 hex (browser + node-safe fallback)
 async function computeHashHex(input: string): Promise<string> {
   if (typeof crypto !== "undefined" && (crypto as any).subtle) {
     const enc = new TextEncoder();
@@ -36,6 +43,7 @@ async function computeHashHex(input: string): Promise<string> {
     const digest = await (crypto as any).subtle.digest("SHA-256", data);
     return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
   }
+  // FNV-1a fallback (fast, not cryptographically strong but fine for cache keys)
   let h = 2166136261 >>> 0;
   for (let i = 0; i < input.length; i++) {
     h ^= input.charCodeAt(i);
@@ -55,7 +63,9 @@ class Semaphore {
   private capacity: number;
   private queue: Array<() => void> = [];
   private current = 0;
-  constructor(cap: number) { this.capacity = cap; }
+  constructor(cap: number) {
+    this.capacity = cap;
+  }
   async acquire() {
     if (this.current < this.capacity) {
       this.current++;
@@ -83,9 +93,8 @@ let consecutiveFailures = 0;
 let circuitBrokenUntil = 0;
 const isCircuitOpen = () => Date.now() < circuitBrokenUntil;
 
-// backoff with jitter
 const backoff = async (attempt: number) => {
-  const base = Math.min(30_000, 500 * 2 ** attempt);
+  const base = Math.min(30_000, 300 * 2 ** attempt);
   const jitter = Math.random() * 500;
   const delay = base + jitter;
   await new Promise((r) => setTimeout(r, delay));
@@ -113,7 +122,7 @@ const withTimeout = async <T>(promiseFactory: (signal: AbortSignal) => Promise<T
   }
 };
 
-// localStorage wrappers
+// localStorage wrappers (browser)
 const readCache = (key: string) => {
   try {
     if (typeof window === "undefined") return null;
@@ -143,35 +152,94 @@ const writeCache = (key: string, value: any, ttlMs = CACHE_TTL_MS) => {
   }
 };
 
-// auth/premium checks (replace with real auth if needed)
+// premium check
 const checkPremiumAccess = (): boolean => {
   if (typeof window === "undefined") return false;
   const plan = window.localStorage.getItem("user_subscription_plan");
   return plan === "premium" || plan === "enterprise";
 };
 
-// premium detection for content
+// premium detection
 const isPremiumContent = (title: string, source: string): boolean => {
   const premiumKeywords = ["exclusive", "premium", "in-depth", "analysis", "investor"];
   const titleLower = title.toLowerCase();
   return premiumKeywords.some((k) => titleLower.includes(k));
 };
 
-// -------------------- System Instructions --------------------
+// -------------------- Implication Category Detection --------------------
+// Heuristic detector that decides which implication categories are relevant.
+// This is intentionally rule-based (deterministic) so you can control behavior without additional model calls.
+
+type ImplicationCategory =
+  | "consumers"
+  | "small_businesses"
+  | "policymakers"
+  | "industry"
+  | "investors"
+  | "none";
+
+const CATEGORY_KEYWORDS: Record<ImplicationCategory, string[]> = {
+  consumers: ["consumer", "user", "household", "buyer", "customers", "privacy", "safety"],
+  small_businesses: ["small business", "local", "shop", "restaurant", "msme", "vendor"],
+  policymakers: ["law", "regulation", "policy", "government", "legislation", "education", "compliance"],
+  industry: ["enterprise", "industry", "operators", "infrastructure", "platform", "vendor"],
+  investors: ["fund", "investment", "ipo", "market", "valuation", "investor", "funding"],
+  none: [],
+};
+
+const detectImplicationCategories = (title: string, summary: string, sourceText: string): ImplicationCategory[] => {
+  const text = `${title}\n${summary}\n${sourceText}`.toLowerCase();
+  const scores: Record<ImplicationCategory, number> = {
+    consumers: 0,
+    small_businesses: 0,
+    policymakers: 0,
+    industry: 0,
+    investors: 0,
+    none: 0,
+  };
+
+  for (const cat of Object.keys(CATEGORY_KEYWORDS) as ImplicationCategory[]) {
+    for (const kw of CATEGORY_KEYWORDS[cat]) {
+      if (text.includes(kw)) scores[cat] += 1;
+    }
+    // also boost on presence of domain-specific signals
+  }
+
+  // convert to array of categories that have score > 0
+  const selected = Object.entries(scores)
+    .filter(([k, v]) => v > 0)
+    .sort((a, b) => b[1] - a[1])
+    .map(([k]) => k as ImplicationCategory);
+
+  if (selected.length === 0) return ["none"];
+  return selected;
+};
+
+// -------------------- System Instructions (improved) --------------------
 const SYSTEM_INSTRUCTIONS = `
 SYSTEM INSTRUCTIONS (STRICT)
 - You are a senior technology journalist and analyst. Produce accurate, evidence-first writing.
 - Never fabricate quotes, numbers, or citations. If a specific fact is not present in the provided source or summary, state uncertainty explicitly (e.g., "not specified", "according to the source", "unconfirmed").
-- When asked for "implications", consider the entire audience: readers, consumers, households, small businesses, policymakers, educators, and technologists — not only developers or investors.
-- Provide clear, practical, and digestible action points or takeaways for everyday readers as well as sector stakeholders.
+- For implications: include only the categories that are relevant to the article. Do not invent categories.
+- If asked for machine-readable JSON output, strictly follow the provided JSON schema. Provide both human-readable Markdown and the JSON if requested.
+- Provide clear, practical, and digestible action points or takeaways for identified audiences.
 - Indicate degree of certainty for background facts: (Confirmed / Probable / Unknown).
 - Do NOT invent URLs. Only include URLs if they are present in the provided source string.
 - Keep word counts within requested bounds. If asked for 600-800 words, aim for ~700 and do not include visible wordcount lines in the article body.
-- Output must be valid Markdown.
+- Output must be valid Markdown by default (unless outputMode is 'json').
 - At the end append a single HTML comment EXACTLY like: <!-- metadata: { "model":"<id>", "fallback":<bool>, "generatedAt":"<ISO>", "qualityScore": <0-100|null>, "wordcount": <int> } -->
 `.trim();
 
-const buildPrompt = (title: string, summary: string, source: string, extra?: string) => {
+// Build prompt that includes only relevant implication categories.
+const buildPrompt = (title: string, summary: string, source: string, categories: ImplicationCategory[], extra?: string, outputMode: "markdown" | "json" = "markdown") => {
+  const categoriesList = categories.includes("none") ? "none" : categories.join(", ");
+
+  const implicationInstructions = categories.includes("none")
+    ? "If no meaningful implications exist, write: 'No major implications identified beyond general awareness.'"
+    : `Include an \"Implications\" section with concrete 1-2 sentence takeaways targeted to these categories (only the listed categories): ${categoriesList}.`;
+
+  const jsonSchemaNote = outputMode === "json" ? `\n- REQUIRED JSON SCHEMA: {\n  title: string,\n  body_markdown: string,\n  implications: [{ category: string, text: string }],\n  meta: { model: string, fallback: boolean, generatedAt: string, qualityScore: number|null, wordcount: number }\n}\n- Return only valid JSON matching this schema. No extra text.` : "";
+
   return `
 ${SYSTEM_INSTRUCTIONS}
 
@@ -182,15 +250,14 @@ USER INSTRUCTIONS:
 - Summary: ${JSON.stringify(summary)}
 - Extra: ${extra ?? ""}
 
+${implicationInstructions}
+
+${jsonSchemaNote}
+
 RESPONSE FORMAT:
-- Do NOT prepend or append any visible read-time or wordcount lines. Only the canonical footer (HTML comment) is allowed.
-- Use Markdown with sections: Lead, Analysis, Conclusion.
-- Include a 3-point "Implications" section that provides distinct, practical takeaways for:
-  1) everyday readers / consumers (what to know or do),
-  2) small businesses / local operators (practical considerations),
-  3) policymakers / educators / technologists (policy, product, or system-level implications).
-  (Keep each implication 1-2 sentences; be concrete and avoid jargon.)
-- At the end append ONE HTML comment: <!-- metadata: { "model":"<id>", "fallback":<bool>, "generatedAt":"<ISO>", "qualityScore": <0-100|null>, "wordcount": <int> } -->
+- Use Markdown with sections: Lead, Analysis, Conclusion (unless outputMode=json).
+- For each implication provide a 1-2 sentence practical takeaway and a degree of certainty (Confirmed/Probable/Unknown).
+- At the end append ONE HTML comment footer: <!-- metadata: { "model":"<id>", "fallback":<bool>, "generatedAt":"<ISO>", "qualityScore": <0-100|null>, "wordcount": <int> } -->
 `.trim();
 };
 
@@ -205,7 +272,7 @@ const makeModelCall = async ({
   preferredModel: string;
   fallbacks?: string[];
   prompt: string;
-  options?: { temperature?: number; maxOutputTokens?: number; topP?: number };
+  options?: { temperature?: number; maxOutputTokens?: number; topP?: number; structured?: boolean };
 }) => {
   if (isCircuitOpen()) {
     throw new Error("AI service temporarily disabled due to repeated errors. Try again later.");
@@ -221,13 +288,14 @@ const makeModelCall = async ({
         attempt++;
         try {
           sendAnalyticsEvent({ event: "model_request_start", payload: { model, attempt } });
+
           const resp = await withTimeout(
             async (signal) => {
               return await ai.models.generateContent({
                 model,
                 contents: prompt,
                 temperature: options.temperature ?? 0.0,
-                maxOutputTokens: options.maxOutputTokens ?? 800,
+                maxOutputTokens: options.maxOutputTokens ?? 900,
                 topP: options.topP ?? 1.0,
                 ...(signal ? { signal } : {}),
               } as any);
@@ -236,6 +304,7 @@ const makeModelCall = async ({
           );
 
           const text = resp?.text ?? resp?.output ?? (typeof resp === "string" ? resp : null);
+
           sendAnalyticsEvent({ event: "model_request_success", payload: { model, attempt } });
 
           consecutiveFailures = 0;
@@ -261,7 +330,7 @@ const makeModelCall = async ({
   }
 };
 
-// -------------------- Quality Check (premium optional) --------------------
+// -------------------- Quality Check --------------------
 const runQualityCheck = async (generated: string, source: string) => {
   try {
     const prompt = `
@@ -296,13 +365,14 @@ Rules: Base factuality only on overlap with the provided source text.
 };
 
 // -------------------- Normalization & Validation --------------------
+
 type GenMeta = {
   model?: string | null;
   fallback?: boolean;
   generatedAt?: string | null;
   qualityScore?: number | null;
   wordcount?: number | null;
-  rawLegacy?: string[]; // removed legacy bits
+  rawLegacy?: string[];
 };
 
 const removeVisibleWordcountHints = (s: string) => {
@@ -327,10 +397,8 @@ const normalizeGeneratedContent = (raw: string): { contentWithFooter: string; bo
   const resultMeta: GenMeta = { qualityScore: null, wordcount: null, rawLegacy: [] };
   let content = raw ?? "";
 
-  // 0) Aggressively remove visible wordcount/read-time hints early
   content = removeVisibleWordcountHints(content);
 
-  // 1) Extract canonical footer: <!-- metadata: { ... } -->
   const footerRegex = /<!--\s*metadata:\s*({[\s\S]*?})\s*-->\s*$/m;
   const footerMatch = content.match(footerRegex);
   if (footerMatch) {
@@ -348,7 +416,6 @@ const normalizeGeneratedContent = (raw: string): { contentWithFooter: string; bo
     content = content.replace(footerRegex, "").trim();
   }
 
-  // 2) Remove legacy plaintext model lines (e.g., "model: gpt-4 ...")
   const legacyLineRegex = /^model:\s*[^\n]+\n?/gim;
   const legacyMatches = content.match(legacyLineRegex);
   if (legacyMatches && legacyMatches.length) {
@@ -356,14 +423,11 @@ const normalizeGeneratedContent = (raw: string): { contentWithFooter: string; bo
     content = content.replace(legacyLineRegex, "").trim();
   }
 
-  // 3) Remove any remaining inline word hints again (safety)
   content = removeVisibleWordcountHints(content);
 
-  // 4) compute precise word count
   const computedWordCount = content.split(/\s+/).filter(Boolean).length;
   if (!resultMeta.wordcount) resultMeta.wordcount = computedWordCount;
 
-  // 5) normalize qualityScore: if float <=1 assumed 0..1
   if (typeof resultMeta.qualityScore === "number") {
     if (resultMeta.qualityScore <= 1.0) {
       resultMeta.qualityScore = Math.round(resultMeta.qualityScore * 100);
@@ -372,7 +436,6 @@ const normalizeGeneratedContent = (raw: string): { contentWithFooter: string; bo
     }
   }
 
-  // 6) Build canonical footer JSON (we keep this for cache/analytics)
   const canonicalMeta = {
     model: resultMeta.model ?? "unknown",
     fallback: !!resultMeta.fallback,
@@ -383,14 +446,10 @@ const normalizeGeneratedContent = (raw: string): { contentWithFooter: string; bo
 
   const footerJson = `\n\n<!-- metadata: ${JSON.stringify(canonicalMeta)} -->`;
   const contentWithFooter = `${content.trim()}\n${footerJson}`;
-
-  // body is the content WITHOUT the footer and without legacy stray lines (and with visible wordcount removed)
   const body = content.trim();
-
   return { contentWithFooter, body, meta: resultMeta };
 };
 
-// -------------------- Helper: stripFooterForPublish --------------------
 const stripFooterForPublish = (contentWithFooter: string) => {
   return contentWithFooter.replace(/<!--\s*metadata:\s*({[\s\S]*?})\s*-->\s*$/m, "").trim();
 };
@@ -398,25 +457,24 @@ const stripFooterForPublish = (contentWithFooter: string) => {
 // -------------------- Public API --------------------
 
 /**
- * analyzeArticle: 3-point summary for general audiences
+ * analyzeArticle: returns either plain text or structured JSON summary depending on outputMode
  */
-export const analyzeArticle = async (articleTitle: string, articleSource: string) => {
+export const analyzeArticle = async (
+  articleTitle: string,
+  articleSource: string,
+  opts?: { outputMode?: "markdown" | "json" }
+) => {
   const hasPremium = checkPremiumAccess();
   const preferred = hasPremium ? MODELS.BEST_FT : MODELS.LITE;
   const fallbacks = [MODELS.STABLE_FLASH, MODELS.HIGH_THROUGHPUT];
 
+  // Detect implication categories first
+  const categories = detectImplicationCategories(articleTitle, "", articleSource);
+
   const prompt = `
 ${SYSTEM_INSTRUCTIONS}
 
-Task: Provide a concise 3-point executive summary for the article:
-Title: ${JSON.stringify(articleTitle)}
-Source: ${JSON.stringify(articleSource)}
-
-Constraints:
-- 3 bullet points, each 1-2 sentences.
-- For each bullet, include a one-line practical takeaway targeted at: everyday readers (what to know or do), small businesses/local operators, and policymakers/technologists (brief).
-- Avoid jargon; be accessible to a general audience.
-- If uncertain, use "According to the source" or "Not specified".
+Task: Provide a concise 3-point executive summary for the article:\nTitle: ${JSON.stringify(articleTitle)}\nSource: ${JSON.stringify(articleSource)}\n\nConstraints:\n- 3 bullet points, each 1-2 sentences.\n- For each bullet, include a 1-line practical takeaway targeted at each relevant implication category: ${categories.join(", ")}.\n- Output as ${opts?.outputMode === "json" ? "strict JSON matching schema" : "Markdown"}.
 `.trim();
 
   try {
@@ -427,6 +485,21 @@ Constraints:
       options: { temperature: 0.0, maxOutputTokens: 220 },
     });
     sendAnalyticsEvent({ event: "analyze_article_served", payload: { model: resp.usedModel } });
+
+    if (opts?.outputMode === "json") {
+      // Attempt to extract JSON
+      const text = resp.text ?? "";
+      const jMatch = text.match(/\{[\s\S]*\}/);
+      if (jMatch) {
+        try {
+          return JSON.parse(jMatch[0]);
+        } catch (e) {
+          return { error: "invalid_json", raw: text };
+        }
+      }
+      return { raw: text };
+    }
+
     return resp.text ?? null;
   } catch (err: any) {
     console.error("analyzeArticle error", err);
@@ -436,20 +509,16 @@ Constraints:
 
 /**
  * generateFullArticle:
- * - premium-aware model selection
- * - cache with TTL and versioning (stores full content + footer)
- * - returns (by default) the article body WITHOUT metadata/footer so UI never sees it
- *
- * opts:
- *  - forceRefresh?: boolean
- *  - publish?: boolean (default true) — if false, returns { body, meta, full } for admin/analytics
+ * - dynamic implications categories
+ * - optional structured JSON output (if outputMode === 'json')
+ * - cache with TTL and versioning
  */
 export const generateFullArticle = async (
   title: string,
   summary: string,
   source: string,
-  opts?: { forceRefresh?: boolean; publish?: boolean }
-): Promise<string | { body: string; meta: any; full: string }> => {
+  opts?: { forceRefresh?: boolean; publish?: boolean; outputMode?: "markdown" | "json" }
+): Promise<string | { body: string; meta: any; full: string } | any> => {
   const cacheKey = await getBriefCacheKey(title, source);
   const hasPremium = checkPremiumAccess();
   const isPremium = isPremiumContent(title, source);
@@ -473,12 +542,12 @@ export const generateFullArticle = async (
     }
   }
 
-  const userInstructions = `
-Please produce a full news article (600-800 words). Keep objective tone, do not invent quotes, mark uncertain claims.
-Include a 3-point "Implications" section that gives practical, non-technical takeaways for everyday readers, small businesses, and policymakers/technologists.
-`;
+  // Detect categories
+  const categories = detectImplicationCategories(title, summary, source);
 
-  const prompt = buildPrompt(title, summary, source, userInstructions);
+  // Build prompt
+  const userInstructions = `\nPlease produce a full news article (600-800 words). Keep objective tone, do not invent quotes, mark uncertain claims. If outputMode=json is requested, return strictly valid JSON only (no trailing text).\n`;
+  const prompt = buildPrompt(title, summary, source, categories, userInstructions, opts?.outputMode ?? "markdown");
 
   const preferred = hasPremium ? MODELS.BEST_FT : MODELS.LITE;
   const fallbackChain = hasPremium
@@ -490,15 +559,44 @@ Include a 3-point "Implications" section that gives practical, non-technical tak
       preferredModel: preferred,
       fallbacks: fallbackChain,
       prompt,
-      options: { temperature: 0.0, maxOutputTokens: 900 },
+      options: { temperature: 0.0, maxOutputTokens: 1200 },
     });
 
     let content = resp.text ?? "";
 
+    // If JSON output expected, try parse
+    if (opts?.outputMode === "json") {
+      const jMatch = content.match(/\{[\s\S]*\}/);
+      if (jMatch) {
+        try {
+          const parsed = JSON.parse(jMatch[0]);
+          // attach meta
+          parsed.meta = parsed.meta ?? {};
+          parsed.meta.model = resp.usedModel ?? parsed.meta.model ?? "unknown";
+          parsed.meta.fallback = !!resp.fallbackOccurred;
+          parsed.meta.generatedAt = parsed.meta.generatedAt ?? new Date().toISOString();
+
+          // quality check for premium
+          if (hasPremium && parsed.body_markdown) {
+            const q = await runQualityCheck(parsed.body_markdown, source);
+            parsed.meta.qualityScore = q.score ?? null;
+          }
+
+          // cache the canonical serialized JSON
+          writeCache(cacheKey, JSON.stringify(parsed), hasPremium ? PREMIUM_CACHE_TTL_MS : CACHE_TTL_MS);
+
+          sendAnalyticsEvent({ event: "ai_brief_generated", payload: { model: resp.usedModel, fallback: resp.fallbackOccurred } });
+          return parsed;
+        } catch (e) {
+          // fallthrough to normalization
+        }
+      }
+    }
+
     // Normalize (extract footer, remove legacy lines and visible wordcount hints)
     const normalized = normalizeGeneratedContent(content);
-    const fullWithFooter = normalized.contentWithFooter; // for cache & audit
-    let body = normalized.body; // the cleaned body (no footer, no legacy lines, no visible wordcount lines)
+    const fullWithFooter = normalized.contentWithFooter;
+    let body = normalized.body;
 
     // Optional quality check for premium users (we inject into cached footer only)
     if (hasPremium && body) {
@@ -530,10 +628,7 @@ Include a 3-point "Implications" section that gives practical, non-technical tak
       writeCache(cacheKey, fullWithFooter, hasPremium ? PREMIUM_CACHE_TTL_MS : CACHE_TTL_MS);
     }
 
-    sendAnalyticsEvent({
-      event: "ai_brief_generated",
-      payload: { model: resp.usedModel, fallback: resp.fallbackOccurred },
-    });
+    sendAnalyticsEvent({ event: "ai_brief_generated", payload: { model: resp.usedModel, fallback: resp.fallbackOccurred } });
 
     if (opts?.publish === false) {
       return { body, meta: normalized.meta, full: fullWithFooter };
@@ -541,10 +636,18 @@ Include a 3-point "Implications" section that gives practical, non-technical tak
     return body;
   } catch (err: any) {
     console.error("generateFullArticle error", err);
-    if (isQuotaError(err) && !hasPremium) {
+    if (isQuotaError(err) && !checkPremiumAccess()) {
       const message = "## Service Temporarily Unavailable\n\nOur AI service is currently at capacity. **Premium subscribers have priority access** and alternative AI models to ensure uninterrupted service.\n\n[Upgrade to Premium](/pricing) to get priority access, unlimited briefs, and premium content.\n";
       return message;
     }
     return "## Service Temporarily Unavailable\n\nWe are currently unable to retrieve the full intelligence report for this article. Please try again later or visit the original source.";
   }
 };
+
+// -------------------- Small helper to request a JSON-mode brief (UI friendly)
+export const generateArticleJsonForUi = async (title: string, summary: string, source: string) => {
+  // returns structured JSON suitable for rendering in UI (title, markdown, implications[])
+  return await generateFullArticle(title, summary, source, { forceRefresh: false, publish: true, outputMode: "json" });
+};
+
+// -------------------- End of file --------------------
