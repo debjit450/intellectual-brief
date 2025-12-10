@@ -192,67 +192,68 @@ const PricingPage: React.FC = () => {
       <div className="min-h-screen bg-paper dark:bg-paper-dark">
         {/* Header */}
         <header className="border-b border-neutral-200 dark:border-neutral-800 bg-paper dark:bg-paper-dark sticky top-0 z-40 backdrop-blur-sm">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 sm:py-4">
             <div className="flex items-center justify-between">
               <Link
                 to="/"
-                className="flex items-center gap-3 group cursor-pointer"
+                className="flex items-center gap-2 sm:gap-3 group cursor-pointer"
               >
-                <div className="w-10 h-10 text-neutral-900 dark:text-white group-hover:text-primary transition-colors">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 text-neutral-900 dark:text-white group-hover:text-primary transition-colors">
                   <img src={logo} alt="The Intellectual Brief Logo" className="w-full h-full object-contain" />
                 </div>
-                <span className="text-xl font-serif font-bold text-neutral-900 dark:text-white">
+                <span className="text-base sm:text-lg md:text-xl font-serif font-bold text-neutral-900 dark:text-white">
                   The Intellectual Brief
                 </span>
               </Link>
               <Link
                 to="/"
-                className="text-sm font-serif text-neutral-600 dark:text-neutral-400 hover:text-primary transition-colors"
+                className="text-xs sm:text-sm font-serif text-neutral-600 dark:text-neutral-400 hover:text-primary transition-colors whitespace-nowrap"
               >
-                ← Back to Home
+                <span className="hidden sm:inline">← Back to Home</span>
+                <span className="sm:hidden">← Home</span>
               </Link>
             </div>
           </div>
         </header>
 
         {/* Hero Section */}
-        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-24 text-center">
+        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16 md:py-20 lg:py-24 text-center">
           <div className="max-w-3xl mx-auto">
-            <h1 className="text-4xl md:text-6xl lg:text-7xl font-serif font-medium text-ink dark:text-ink-dark leading-tight mb-6">
+            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-serif font-medium text-ink dark:text-ink-dark leading-tight mb-4 sm:mb-6 px-2">
               Choose Your Plan
             </h1>
-            <p className="text-xl md:text-2xl text-neutral-600 dark:text-neutral-400 font-serif leading-relaxed mb-4">
+            <p className="text-base sm:text-lg md:text-xl lg:text-2xl text-neutral-600 dark:text-neutral-400 font-serif leading-relaxed mb-3 sm:mb-4 px-4">
               Unlock unlimited intelligence briefs, premium content, and priority access to our AI-powered news analysis.
             </p>
-            <p className="text-lg text-primary dark:text-primary font-serif font-medium">
+            <p className="text-sm sm:text-base md:text-lg text-primary dark:text-primary font-serif font-medium px-4">
               All pricing plans coming soon
             </p>
           </div>
         </section>
 
         {/* Pricing Cards */}
-        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-24">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 lg:gap-12">
+        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-16 sm:pb-20 md:pb-24">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8 lg:gap-12 max-w-6xl mx-auto">
             {plans.map((planItem) => (
               <div
                 key={planItem.id}
-                className={`relative flex flex-col p-8 border-2 rounded-none transition-all duration-300 ${
+                className={`relative flex flex-col p-6 sm:p-8 border-2 rounded-none transition-all duration-300 ${
                   planItem.highlight
-                    ? 'border-primary bg-primary/5 dark:bg-primary/10 scale-105 md:scale-110 z-10'
+                    ? 'border-primary bg-primary/5 dark:bg-primary/10 md:scale-105 lg:scale-110 z-10 shadow-lg dark:shadow-primary/20'
                     : 'border-neutral-200 dark:border-neutral-800 bg-paper dark:bg-paper-dark hover:border-neutral-300 dark:hover:border-neutral-700'
                 } ${plan === planItem.id ? 'ring-2 ring-primary' : ''}`}
               >
                 {planItem.popular && (
-                  <div className="absolute -top-4 left-1/2 -translate-x-1/2">
-                    <span className="bg-primary text-white px-4 py-1 text-[10px] font-bold uppercase tracking-[0.2em]">
+                  <div className="absolute -top-3 sm:-top-4 left-1/2 -translate-x-1/2 z-20">
+                    <span className="bg-primary text-white px-3 sm:px-4 py-1 text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.15em] sm:tracking-[0.2em] whitespace-nowrap">
                       Most Popular
                     </span>
                   </div>
                 )}
 
-                <div className="flex items-center gap-3 mb-4">
+                <div className="flex items-center gap-3 mb-4 sm:mb-6">
                   <div
-                    className={`p-2 rounded ${
+                    className={`p-2 sm:p-2.5 rounded transition-colors ${
                       planItem.highlight
                         ? 'bg-primary text-white'
                         : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400'
@@ -260,38 +261,38 @@ const PricingPage: React.FC = () => {
                   >
                     {planItem.icon}
                   </div>
-                  <h3 className="text-2xl font-serif font-medium text-ink dark:text-ink-dark">
+                  <h3 className="text-xl sm:text-2xl font-serif font-medium text-ink dark:text-ink-dark">
                     {planItem.name}
                   </h3>
                 </div>
 
-                <div className="mb-6">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-4xl md:text-5xl font-serif font-medium text-ink dark:text-ink-dark">
+                <div className="mb-6 sm:mb-8">
+                  <div className="flex items-baseline gap-2 flex-wrap">
+                    <span className="text-3xl sm:text-4xl md:text-5xl font-serif font-medium text-ink dark:text-ink-dark leading-none">
                       Coming Soon
                     </span>
                   </div>
-                  <p className="text-sm text-neutral-500 dark:text-neutral-400 font-serif italic mt-2">
+                  <p className="text-xs sm:text-sm text-neutral-500 dark:text-neutral-400 font-serif italic mt-2 sm:mt-3">
                     {planItem.description}
                   </p>
-                  <p className="text-xs text-primary dark:text-primary font-serif mt-2">
+                  <p className="text-[10px] sm:text-xs text-primary dark:text-primary font-serif mt-2">
                     Pricing details will be available soon
                   </p>
                 </div>
 
-                <ul className="flex-1 space-y-4 mb-8">
+                <ul className="flex-1 space-y-3 sm:space-y-4 mb-6 sm:mb-8 min-h-[200px] sm:min-h-[240px]">
                   {planItem.features.map((feature, idx) => (
-                    <li key={idx} className="flex items-start gap-3">
-                      <Check className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
-                      <span className="text-sm font-serif text-neutral-700 dark:text-neutral-300">
+                    <li key={idx} className="flex items-start gap-2 sm:gap-3">
+                      <Check className="w-4 h-4 sm:w-5 sm:h-5 text-primary flex-shrink-0 mt-0.5" />
+                      <span className="text-xs sm:text-sm font-serif text-neutral-700 dark:text-neutral-300 leading-relaxed">
                         {feature}
                       </span>
                     </li>
                   ))}
                   {planItem.limitations.map((limitation, idx) => (
-                    <li key={idx} className="flex items-start gap-3">
-                      <X className="w-5 h-5 text-neutral-400 flex-shrink-0 mt-0.5" />
-                      <span className="text-sm font-serif text-neutral-500 dark:text-neutral-500 line-through">
+                    <li key={idx} className="flex items-start gap-2 sm:gap-3">
+                      <X className="w-4 h-4 sm:w-5 sm:h-5 text-neutral-400 flex-shrink-0 mt-0.5" />
+                      <span className="text-xs sm:text-sm font-serif text-neutral-500 dark:text-neutral-500 line-through leading-relaxed">
                         {limitation}
                       </span>
                     </li>
@@ -300,14 +301,14 @@ const PricingPage: React.FC = () => {
 
                 <button
                   onClick={() => handleUpgrade(planItem.id)}
-                  className={`w-full py-4 px-6 font-bold text-[10px] uppercase tracking-[0.2em] transition-all duration-300 flex items-center justify-center gap-2 ${
+                  className={`w-full py-3 sm:py-4 px-4 sm:px-6 font-bold text-[9px] sm:text-[10px] uppercase tracking-[0.15em] sm:tracking-[0.2em] transition-all duration-300 flex items-center justify-center gap-2 ${
                     planItem.highlight
-                      ? 'bg-primary text-white hover:bg-primary/90'
+                      ? 'bg-primary text-white hover:bg-primary/90 shadow-md hover:shadow-lg'
                       : 'bg-neutral-900 dark:bg-neutral-100 text-white dark:text-black hover:bg-primary dark:hover:bg-primary hover:text-white dark:hover:text-white'
                   }`}
                 >
-                  Coming Soon
-                  <ArrowRight className="w-4 h-4" />
+                  <span>Coming Soon</span>
+                  <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
                 </button>
               </div>
             ))}
@@ -315,11 +316,11 @@ const PricingPage: React.FC = () => {
         </section>
 
         {/* FAQ Section */}
-        <section className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pb-24">
-          <h2 className="text-3xl md:text-4xl font-serif font-medium text-ink dark:text-ink-dark text-center mb-12">
+        <section className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pb-12 sm:pb-16 md:pb-20 lg:pb-24">
+          <h2 className="text-2xl sm:text-3xl md:text-4xl font-serif font-medium text-ink dark:text-ink-dark text-center mb-8 sm:mb-10 md:mb-12 px-4">
             Frequently Asked Questions
           </h2>
-          <div className="space-y-6">
+          <div className="space-y-5 sm:space-y-6">
             {[
               {
                 q: 'What happens when service is exhausted?',
@@ -344,12 +345,12 @@ const PricingPage: React.FC = () => {
             ].map((faq, idx) => (
               <div
                 key={idx}
-                className="border-b border-neutral-200 dark:border-neutral-800 pb-6"
+                className="border-b border-neutral-200 dark:border-neutral-800 pb-5 sm:pb-6"
               >
-                <h3 className="text-lg font-serif font-medium text-ink dark:text-ink-dark mb-2">
+                <h3 className="text-base sm:text-lg font-serif font-medium text-ink dark:text-ink-dark mb-2 sm:mb-3">
                   {faq.q}
                 </h3>
-                <p className="text-neutral-600 dark:text-neutral-400 font-serif leading-relaxed">
+                <p className="text-sm sm:text-base text-neutral-600 dark:text-neutral-400 font-serif leading-relaxed">
                   {faq.a}
                 </p>
               </div>
@@ -358,20 +359,20 @@ const PricingPage: React.FC = () => {
         </section>
 
         {/* CTA Section */}
-        <section className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pb-24 text-center">
-          <div className="bg-neutral-50 dark:bg-neutral-900/50 border border-neutral-200 dark:border-neutral-800 p-12">
-            <h2 className="text-3xl md:text-4xl font-serif font-medium text-ink dark:text-ink-dark mb-4">
+        <section className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pb-12 sm:pb-16 md:pb-20 lg:pb-24 text-center">
+          <div className="bg-neutral-50 dark:bg-neutral-900/50 border border-neutral-200 dark:border-neutral-800 p-6 sm:p-8 md:p-10 lg:p-12">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-serif font-medium text-ink dark:text-ink-dark mb-3 sm:mb-4">
               Still have questions?
             </h2>
-            <p className="text-neutral-600 dark:text-neutral-400 font-serif mb-8">
+            <p className="text-sm sm:text-base text-neutral-600 dark:text-neutral-400 font-serif mb-6 sm:mb-8">
               Our team is here to help you choose the right plan for your needs.
             </p>
             <Link
               to="/contact"
-              className="inline-flex items-center gap-2 px-8 py-4 bg-neutral-900 dark:bg-neutral-100 text-white dark:text-black font-bold text-[10px] uppercase tracking-[0.2em] hover:bg-primary dark:hover:bg-primary transition-colors"
+              className="inline-flex items-center gap-2 px-6 sm:px-8 py-3 sm:py-4 bg-neutral-900 dark:bg-neutral-100 text-white dark:text-black font-bold text-[9px] sm:text-[10px] uppercase tracking-[0.15em] sm:tracking-[0.2em] hover:bg-primary dark:hover:bg-primary transition-colors"
             >
               Contact Us
-              <ArrowRight className="w-4 h-4" />
+              <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
             </Link>
           </div>
         </section>

@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
 import { AuthProvider } from './context/AuthContext';
 import { SubscriptionProvider } from './context/SubscriptionContext';
+import { ThemeProvider } from './context/ThemeContext';
 import { Analytics } from "@vercel/analytics/react";
 import HomePage from './pages/HomePage';
 import ArticlePage from './pages/ArticlePage';
@@ -27,31 +28,33 @@ const App: React.FC = () => {
   return (
     <HelmetProvider>
       <BrowserRouter>
-        <AuthProvider>
-          <SubscriptionProvider>
-            <Routes>
-              <Route path="/" element={<HomePage />} />
-              <Route path="/article/:slug" element={<ArticlePage />} />
-              <Route path="/rss.xml" element={<RSSPage />} />
-              <Route path="/sitemap.xml" element={<SitemapPage />} />
-              <Route path="/news-sitemap.xml" element={<NewsSitemapPage />} />
-              <Route path="/about" element={<AboutPage />} />
-              <Route path="/privacy" element={<PrivacyPolicyPage />} />
-              <Route path="/terms" element={<TermsOfServicePage />} />
-              <Route path="/cookies" element={<CookiePolicyPage />} />
-              <Route path="/editorial" element={<EditorialPolicyPage />} />
-              <Route path="/contact" element={<ContactPage />} />
-              <Route path="/masthead" element={<MastheadPage />} />
-              <Route path="/disclaimer" element={<DisclaimerPage />} />
-              <Route path="/accessibility" element={<AccessibilityPage />} />
-              <Route path="/pricing" element={<PricingPage />} />
-              <Route path="/account" element={<AccountPage />} />
-              <Route path="/settings" element={<SettingsPage />} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-            <Analytics />
-          </SubscriptionProvider>
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <SubscriptionProvider>
+              <Routes>
+                <Route path="/" element={<HomePage />} />
+                <Route path="/article/:slug" element={<ArticlePage />} />
+                <Route path="/rss.xml" element={<RSSPage />} />
+                <Route path="/sitemap.xml" element={<SitemapPage />} />
+                <Route path="/news-sitemap.xml" element={<NewsSitemapPage />} />
+                <Route path="/about" element={<AboutPage />} />
+                <Route path="/privacy" element={<PrivacyPolicyPage />} />
+                <Route path="/terms" element={<TermsOfServicePage />} />
+                <Route path="/cookies" element={<CookiePolicyPage />} />
+                <Route path="/editorial" element={<EditorialPolicyPage />} />
+                <Route path="/contact" element={<ContactPage />} />
+                <Route path="/masthead" element={<MastheadPage />} />
+                <Route path="/disclaimer" element={<DisclaimerPage />} />
+                <Route path="/accessibility" element={<AccessibilityPage />} />
+                <Route path="/pricing" element={<PricingPage />} />
+                <Route path="/account" element={<AccountPage />} />
+                <Route path="/settings" element={<SettingsPage />} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+              <Analytics />
+            </SubscriptionProvider>
+          </AuthProvider>
+        </ThemeProvider>
       </BrowserRouter>
     </HelmetProvider>
   );

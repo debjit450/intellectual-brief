@@ -6,6 +6,7 @@ import Sidebar from '../components/Sidebar';
 import NewsFeed from '../components/NewsFeed';
 import AuthModal from '../components/AuthModal';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { Category, Article } from '../types';
 import logo from '/assets/logo.png';
 
@@ -48,12 +49,12 @@ const HomePage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState(searchQueryParam);
   const [bookmarks, setBookmarks] = useState<string[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [edition, setEdition] = useState<EditionKey>("us_world");
 
   const { user } = useAuth();
+  const { theme, toggleTheme } = useTheme();
 
   // Sync URL params with state
   React.useEffect(() => {
@@ -82,18 +83,6 @@ const HomePage: React.FC = () => {
       : '/';
     window.history.replaceState({}, '', newUrl);
   }, [activeCategory, searchQuery]);
-
-  useEffect(() => {
-    if (theme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  }, [theme]);
-
-  const toggleTheme = () => {
-    setTheme(prev => prev === 'light' ? 'dark' : 'light');
-  };
 
   const handleSearch = (query: string) => {
     setSearchQuery(query);

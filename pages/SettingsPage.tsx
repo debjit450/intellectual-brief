@@ -2,17 +2,13 @@ import React, { useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import { ArrowLeft, Moon, Sun, Bell, Globe, Eye, EyeOff, Save } from 'lucide-react';
 import logo from '/assets/logo.png';
 
 const SettingsPage: React.FC = () => {
   const { user } = useAuth();
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    if (typeof window !== 'undefined') {
-      return document.documentElement.classList.contains('dark') ? 'dark' : 'light';
-    }
-    return 'light';
-  });
+  const { theme, toggleTheme } = useTheme();
   const [notifications, setNotifications] = useState({
     email: true,
     push: false,
@@ -26,20 +22,6 @@ const SettingsPage: React.FC = () => {
 
   const canonicalDomain = 'https://theintellectualbrief.online';
   const settingsUrl = `${canonicalDomain}/settings`;
-
-  const toggleTheme = () => {
-    const newTheme = theme === 'light' ? 'dark' : 'light';
-    setTheme(newTheme);
-    if (typeof window !== 'undefined') {
-      if (newTheme === 'dark') {
-        document.documentElement.classList.add('dark');
-        localStorage.setItem('theme', 'dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-        localStorage.setItem('theme', 'light');
-      }
-    }
-  };
 
   const handleSave = () => {
     // Save settings to localStorage

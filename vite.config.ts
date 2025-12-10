@@ -22,6 +22,7 @@ export default defineConfig(({ mode }) => {
       // Handle SPA routing - serve index.html for all routes
       preview: {
         port: 3000,
+        // Ensure preview server handles SPA routing
       },
       build: {
         rollupOptions: {
