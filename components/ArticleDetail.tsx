@@ -38,6 +38,28 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
   const articleUrl = typeof window !== 'undefined'
     ? `${canonicalDomain}/article/${articleSlug}`
     : `${canonicalDomain}/article/${articleSlug}`;
+  const buildShareUrl = () => {
+    if (typeof window === 'undefined') return articleUrl;
+    try {
+      const payload = {
+        id: article.id,
+        title: article.title,
+        summary: article.summary,
+        timestamp: article.timestamp,
+        source: article.source,
+        category: article.category,
+        imageUrl: article.imageUrl,
+        url: article.url,
+        countryCode: article.countryCode,
+        countryName: article.countryName,
+      };
+      const encoded = encodeURIComponent(btoa(JSON.stringify(payload)));
+      return `${articleUrl}?data=${encoded}`;
+    } catch (err) {
+      console.warn('Failed to encode share payload:', err);
+      return articleUrl;
+    }
+  };
   const title = `${article.title} • The Intellectual Brief`;
   const description =
     article.summary ||
@@ -110,7 +132,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
   const handleShare = async () => {
     if (typeof window === 'undefined') return;
 
-    const shareUrl = articleUrl;
+    const shareUrl = buildShareUrl();
     const shareTitle = article.title;
     const shareText =
       article.summary ||

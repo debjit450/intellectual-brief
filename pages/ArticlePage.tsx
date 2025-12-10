@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { Article, Category } from '../types';
 import { generateSlug, extractIdFromSlug } from '../utils/slug';
@@ -12,6 +12,7 @@ import { getArticleById, getAllCachedArticles, storeArticle } from '../utils/art
 const ArticlePage: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [article, setArticle] = useState<Article | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -33,6 +34,24 @@ const ArticlePage: React.FC = () => {
       setError(false);
 
       try {
+        // 1) If shared link carries the article payload, hydrate directly
+        const dataParam = searchParams.get('data');
+        if (dataParam && typeof window !== 'undefined') {
+          try {
+            const decoded = decodeURIComponent(dataParam);
+            const parsed = JSON.parse(atob(decoded));
+            if (parsed?.id && parsed?.title && parsed?.summary && parsed?.source && parsed?.timestamp) {
+              storeArticle(parsed);
+              setArticle(parsed);
+              setLoading(false);
+              return;
+            }
+          } catch (shareErr) {
+            console.warn('Failed to hydrate article from shared payload:', shareErr);
+            // Continue with normal lookup flow
+          }
+        }
+
         // Extract ID from slug if present
         const articleId = extractIdFromSlug(slug);
 
@@ -125,7 +144,7 @@ const ArticlePage: React.FC = () => {
     };
 
     loadArticle();
-  }, [slug]);
+  }, [slug, searchParams]);
 
   // Generate SEO metadata even while loading (for initial render)
   // Always use canonical domain (non-www) for SEO consistency
