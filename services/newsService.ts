@@ -1,7 +1,7 @@
 import { Article, Category, NewsResponse } from "../types";
 
 const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "https://tib-backend-bqvr.onrender.com";
+  import.meta.env.VITE_API_BASE_URL || "https://tib-backend-production.up.railway.app";
 
 export const fetchNews = async (
   category: Category,

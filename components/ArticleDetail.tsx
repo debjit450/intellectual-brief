@@ -10,6 +10,7 @@ import { generateSlug } from '../utils/slug';
 import { storeArticle } from '../utils/articleStorage';
 import AdUnit from './AdUnit';
 import { containsSensitiveKeywords } from '../utils/safety';
+import AIBriefLoader from './AIBriefLoader';
 
 interface ArticleDetailProps {
   article: Article;
@@ -180,6 +181,12 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
       }
 
       setLoading(true);
+
+      // Show article summary immediately for engagement while AI generates
+      if (article.summary) {
+        setFullContent(article.summary);
+      }
+
       try {
         const result = await generateFullArticle(
           article.title,
@@ -193,7 +200,14 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
         const normalized = coerceClientBrief(result);
         setBriefData(normalized);
         setBlocked(!!normalized.blocked);
-        setFullContent(normalized.summary || "");
+
+        // Update with full AI-generated content when ready
+        if (normalized.summary && normalized.summary.length > 0) {
+          setFullContent(normalized.summary);
+        } else if (article.summary) {
+          // Keep original summary if AI didn't generate one
+          setFullContent(article.summary);
+        }
       } catch (err) {
         console.error("Failed to load full article:", err);
         if (isMounted) {
@@ -651,8 +665,23 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
             </p>
 
             <div className="text-sm text-neutral-500 dark:text-neutral-400 uppercase tracking-[0.18em] mb-6">
-              AI-generated brief — please read the original source.
+              {loading ? "Generating AI brief..." : "AI-generated brief — please read the original source."}
             </div>
+
+            {/* Show article summary preview while loading for engagement */}
+            {loading && article.summary && fullContent === article.summary && (
+              <div className="mb-8 p-6 bg-neutral-50 dark:bg-neutral-900/30 border border-neutral-200 dark:border-neutral-800 rounded-none">
+                <h3 className="text-sm uppercase tracking-[0.2em] text-primary mb-4 font-mono">
+                  Article Summary
+                </h3>
+                <p className="text-base md:text-lg font-serif text-neutral-700 dark:text-neutral-300 leading-relaxed">
+                  {article.summary}
+                </p>
+                <p className="mt-4 text-xs text-neutral-500 dark:text-neutral-400 italic">
+                  Full AI analysis in progress...
+                </p>
+              </div>
+            )}
 
             <div className="markdown-body text-neutral-900 dark:text-neutral-300 animate-fade-in" itemProp="articleBody">
               {isSensitiveMode ? (
@@ -763,8 +792,15 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
                     },
                   }}
                 >
-                  {fullContent}
+                  {fullContent || (loading && article.summary ? article.summary : "")}
                 </ReactMarkdown>
+              )}
+
+              {/* Show engaging loader below content while AI generates */}
+              {loading && (!fullContent || fullContent === article.summary) && !isSensitiveMode && (
+                <div className="mt-12 pt-8 border-t border-neutral-200 dark:border-neutral-800">
+                  <AIBriefLoader articleTitle={article.title} estimatedTime={20} />
+                </div>
               )}
             </div>
 
@@ -785,28 +821,15 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
               <div className="w-16 h-px bg-neutral-400"></div>
             </div>
 
-            {loading ? (
-              <div className="space-y-8 py-12">
-                <div className="flex flex-col items-center justify-center space-y-4">
-                  <TBLogo className="w-8 h-8 text-neutral-300 dark:text-neutral-700 animate-pulse" />
-                  <span className="text-xs font-serif italic text-neutral-400">
-                    Curating your brief...
-                  </span>
-                </div>
-              </div>
-            ) : (
-              <>
-                {/* Middle In-Content Ad - Only show if content is substantial and safe */}
-                {!isSensitiveMode && fullContent && fullContent.length > 1500 && (
-                  <AdUnit
-                    slot={AD_CONFIG.slots.articleMiddle}
-                    format="rectangle"
-                    className="my-16"
-                    lazy={true}
-                    minHeight="250px"
-                  />
-                )}
-              </>
+            {/* Middle In-Content Ad - Only show if content is substantial and safe */}
+            {!loading && !isSensitiveMode && fullContent && fullContent.length > 1500 && (
+              <AdUnit
+                slot={AD_CONFIG.slots.articleMiddle}
+                format="rectangle"
+                className="my-16"
+                lazy={true}
+                minHeight="250px"
+              />
             )}
 
             {/* Bottom Ad - Before Footer */}

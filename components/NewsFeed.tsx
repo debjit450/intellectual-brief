@@ -30,13 +30,44 @@ const NewsFeed: React.FC<NewsFeedProps> = ({ activeCategory, searchQuery, onSele
 
     try {
       const response = await fetchNews(activeCategory, searchQuery, countryParam);
-      const safeArticles = filterUnsafeArticles(response.articles);
-      setArticles(safeArticles);
-
-      // Store all articles in localStorage cache so they're available when clicked
-      safeArticles.forEach(article => {
+      
+      // Show articles immediately with keyword filtering, then enhance with moderation
+      const keywordFiltered = response.articles.filter(
+        (article) => {
+          const text = `${article.title} ${article.summary || ""} ${article.category || ""}`;
+          const normalized = text.toLowerCase();
+          const sensitiveKeywords = ["abuse", "assault", "minor", "child", "suicide", "self-harm", "sexual assault", "rape", "murder", "homicide", "terrorism", "terrorist"];
+          return !sensitiveKeywords.some(keyword => normalized.includes(keyword));
+        }
+      );
+      
+      // Show articles immediately
+      setArticles(keywordFiltered);
+      
+      // Store articles immediately
+      keywordFiltered.forEach(article => {
         storeArticle(article);
       });
+      
+      // Then try moderation in background (non-blocking) with timeout
+      try {
+        const moderationPromise = filterUnsafeArticles(response.articles);
+        const timeoutPromise = new Promise<Article[]>((resolve) =>
+          setTimeout(() => resolve(keywordFiltered), 8000) // 8 second timeout
+        );
+        
+        const safeArticles = await Promise.race([moderationPromise, timeoutPromise]);
+        
+        // Update with moderation results if different and we got real results
+        if (safeArticles.length !== keywordFiltered.length && safeArticles.length < keywordFiltered.length) {
+          // Only update if moderation actually removed articles (more strict)
+          setArticles(safeArticles);
+          console.log(`Moderation removed ${keywordFiltered.length - safeArticles.length} articles`);
+        }
+      } catch (modError) {
+        console.warn("Background moderation failed, using keyword-filtered articles:", modError);
+        // Keep showing keyword-filtered articles
+      }
     } catch (e) {
       setError(true);
     }

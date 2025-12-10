@@ -1,12 +1,13 @@
-// aiBriefs_v6_tib_premium_public.ts
-// - Major product upgrade: deeper briefs, TIB editorial voice, multi-layer implications
+// aiBriefs_v7_tib_advanced.ts
+// - Advanced AI responses with enhanced reasoning and depth
 // - Strict safety/compliance preserved (two-mode logic retained)
 // - Robust parsing + heuristic recovery + telemetry + circuit breaker + caching
-// - Admin raw output retained for debugging (do NOT surface to users without review)
-// - Sanitization: platform-only fields removed for public responses by default
+// - Uses only gemini-2.5-flash and gemini-2.5-flash-lite models
+// - All users start with advanced model, fallback to lite when needed
 // - WARNING: run integration tests with your model outputs and tune token budgets to your environment
 
 import { GoogleGenAI } from "@google/genai";
+import { moderateArticle, shouldBlockContent, getBlockReason, type ModerationResult } from "./contentModeration";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
@@ -20,11 +21,8 @@ const CIRCUIT_BREAKER_THRESHOLD = 5;
 const CIRCUIT_BREAKER_COOLDOWN_MS = 1000 * 60 * 5;
 
 const MODELS = {
-  BEST_FT: "gemini-2.5-flash",
+  ADVANCED: "gemini-2.5-flash",
   LITE: "gemini-2.5-flash-lite",
-  STABLE_FLASH: "gemini-2.0-flash",
-  HIGH_THROUGHPUT: "gemini-1.5-flash",
-  PRO: "gemini-2.5-pro",
 };
 
 // -------------------- Telemetry hook (pluggable) --------------------
@@ -257,38 +255,55 @@ const detectImplicationCategories = (title: string, summary: string, sourceText:
   return entries;
 };
 
-// -------------------- System Instructions (TIB voice + safety) --------------------
+// -------------------- System Instructions (Journalistic TIB voice + safety) --------------------
 const SYSTEM_INSTRUCTIONS = `
-SYSTEM: You are "The Intellectual Brief" senior analyst persona.
-Tone: concise, authoritative, evidence-first, high-clarity. Use short paragraphs and numbered sections.
+SYSTEM: You are a senior news reporter and analyst writing for "The Intellectual Brief".
+Tone: Write like a professional journalist - clear, authoritative, engaging, and accessible. Use natural language that readers can easily understand. Write in a narrative style with smooth transitions, not technical jargon.
+Writing Style: 
+- Write as if telling a story to an informed reader
+- Use professional but conversational language
+- Avoid technical terms like "first-order impact", "second-order impact", "confidence levels", "scores"
+- Instead, use natural phrases like "immediate consequences", "broader implications", "likely effects", "potential outcomes"
+- Integrate analysis seamlessly into the narrative
+Analytical Depth: Provide insightful analysis that goes beyond surface-level facts. Identify underlying drivers, systemic patterns, and cascading effects - but explain them in plain, professional language.
+Reasoning: Demonstrate clear logical progression from facts to implications. Show causal relationships naturally within the narrative flow.
+Contextual Awareness: Connect the story to broader trends, historical precedents, and cross-domain impacts - but do so naturally, not as a technical exercise.
 Do NOT invent or attribute direct quotes, statistics, or named claims that are not present in the provided source. If a fact is not stated in the source, label it "unconfirmed".
-Always avoid copyrighted text reproduction; rephrase and synthesize in your own words.
+Always avoid copyrighted text reproduction; rephrase and synthesize in your own words with sophisticated but accessible analysis.
 Adhere strictly to the Safety rules provided below.
 When requested to output JSON, follow the schema exactly and return only valid JSON.
 `.trim();
 
 const SAFETY_BRIEF_RULES = `
 SAFETY:
-- Two-mode logic (MANDATORY):
-  * Sensitive Mode triggers if the source mentions minors, suicide/self-harm, sexual exploitation, crime with graphic detail, mass casualty, hate or graphic harm. In Sensitive Mode, return ONLY a 3-5 sentence neutral factual summary, no analysis, no outlook, mark uncertain items as "unconfirmed", set risk_rating_adsense = "high" or "prohibited", image_safe = false, blocked = true for ads.
-  * Full Brief Mode for all other stories. Produce deep analytical brief (see format below).
+- Content moderation is handled separately by our moderation service - do not block content yourself.
+- Always produce full analytical briefs regardless of topic - our moderation system will handle blocking if needed.
+- Do NOT set blocked = true in your response - let the moderation service decide.
 - Do NOT invent quotes, numbers, or URLs.
 - Mark any unverified claims as "unconfirmed".
 - Image safety: default to false when in doubt; only true when no sensitive cues.
+- Risk rating: Use your best judgment based on content, but moderation service will make final decision.
 `.trim();
 
-// Full brief format declaration used in prompts (TIB signature)
+// Full brief format declaration used in prompts (Journalistic TIB signature)
 const TIB_BRIEF_FORMAT = `
-FULL BRIEF FORMAT (TIB STYLE):
-- Target length: Aim for 450-700 words total (not including metadata comment). If user asks for shorter, follow that bound.
+FULL BRIEF FORMAT (JOURNALISTIC TIB STYLE):
+- Target length: Aim for 500-800 words total (not including metadata comment). If user asks for shorter, follow that bound.
+- Write as a cohesive news article, not a technical report. Use natural section headings and smooth transitions.
 - Sections (in order):
-  1) Executive Summary (3-5 sentences) — crisp, actionable.
-  2) What Happened (Concise timeline / key facts).
-  3) Why It Matters (drivers, causation, stakeholders).
-  4) Implications (structured): list first-order impacts, second-order impacts, and who is affected (actors). Provide short actionable signals.
-  5) Outlook (2-3 short bullets: likely near-term trends).
-- Always include a short "degree of certainty" tag for background claims: (Confirmed | Probable | Unknown).
-- Do not reproduce sentences from the source; rephrase and synthesize.
+  1) Executive Summary (4-6 sentences) — Write a compelling opening that captures the essence of the story. Highlight why this matters to readers. Use natural, engaging language.
+  2) What Happened (Concise narrative with context) — Tell the story clearly. Include relevant background that helps readers understand the significance. Write chronologically or thematically, whichever flows better.
+  3) Why It Matters (deep analysis woven naturally) — Explain the significance in accessible language. Discuss immediate consequences, broader implications, and long-term effects. Identify who is affected and how. Write this as analysis, not as a technical breakdown.
+  4) Looking Ahead (3-4 paragraphs or bullet points) — Discuss what to watch for, potential developments, and what might happen next. Use natural language like "likely", "could", "may", "appears to be" rather than technical confidence levels.
+- Writing Guidelines:
+  - Write naturally, as if explaining to a well-informed colleague
+  - Avoid technical jargon and academic language
+  - Do NOT use terms like "first-order impact", "second-order impact", "confidence score", "certainty level"
+  - Instead, use phrases like "immediate effects", "broader implications", "likely outcomes", "potential consequences"
+  - Integrate all analysis into flowing prose
+  - Use transitions to connect ideas smoothly
+- Analytical Depth: Include thoughtful analysis, alternative perspectives, and risk factors - but express them naturally within the narrative.
+- Do not reproduce sentences from the source; rephrase and synthesize with sophisticated but accessible analysis.
 `.trim();
 
 // JSON schema note for strict JSON output
@@ -328,12 +343,24 @@ const buildPrompt = (
     TIB_BRIEF_FORMAT,
     `USER INPUT:\nHeadline: ${JSON.stringify(title)}\nSource text/context: ${JSON.stringify(source)}\nExisting notes/summary: ${JSON.stringify(summary)}\nDetected categories: ${categoriesList}`,
     `EXTRA INSTRUCTIONS: ${extraInstructions}`,
+    `WRITING REQUIREMENTS:`,
+    `- Write like a professional journalist: clear, engaging, and accessible`,
+    `- Use natural, professional language - avoid technical jargon`,
+    `- Do NOT use terms like "first-order", "second-order", "confidence", "score", "certainty level"`,
+    `- Instead use natural phrases: "immediate effects", "broader implications", "likely outcomes", "potential consequences"`,
+    `- Integrate analysis seamlessly into the narrative flow`,
+    `- Apply sophisticated reasoning but express it in accessible language`,
+    `- Provide strategic depth: go beyond what happened to explain why it matters`,
+    `- Include nuanced analysis: consider multiple perspectives and potential outcomes`,
+    `- Write with intellectual rigor but in a way that reads naturally`,
     modeNote,
     outputMode === "json" ? JSON_SCHEMA_NOTE : "",
     `OUTPUT RULES (STRICT):`,
     `- Do not invent quotes, names, or URLs. If the source lacks a fact, mark it "unconfirmed".`,
-    `- If Sensitive Mode is triggered by the source, produce ONLY a 3-5 sentence neutral factual summary and set risk_rating_adsense appropriately.`,
-    `- If Full Brief Mode, aim for 450-700 words, follow the exact section order in TIB_BRIEF_FORMAT, emphasize \"Why it matters\" and structured implications. Use numbered lists or short paragraphs.`,
+    `- Always produce full analytical briefs - do not block content yourself. Our moderation service handles blocking.`,
+    `- Aim for 500-800 words written as a cohesive news article. Follow the section order in TIB_BRIEF_FORMAT. Write naturally - use flowing prose, not technical breakdowns. Integrate all implications and analysis into the narrative naturally.`,
+    `- CRITICAL: Do NOT include technical terms like "first-order", "second-order", "confidence", "score" in the article text. Write naturally as a journalist would.`,
+    `- Do NOT set blocked = true - let the moderation service decide based on Perspective API analysis.`,
     `- At the end append exactly one HTML comment: <!-- metadata: { "model":"<id>", "fallback":<bool>, "generatedAt":"<ISO>", "qualityScore": <0-100|null>, "wordcount": <int> } -->`,
   ].join("\n\n");
   return prompt;
@@ -505,8 +532,8 @@ const runQualityCheck = async (generated: string, source: string) => {
   try {
     const prompt = `You are a factuality and clarity judge. Return JSON: {"score": <0-100>, "notes":"<short notes>"}\nArticle: ${JSON.stringify(generated)}\nSource: ${JSON.stringify(source)}\nRules: Base factuality only on overlap with the provided source text.`;
     const resp = await makeModelCall({
-      preferredModel: MODELS.HIGH_THROUGHPUT,
-      fallbacks: [MODELS.STABLE_FLASH],
+      preferredModel: MODELS.ADVANCED,
+      fallbacks: [MODELS.LITE],
       prompt,
       options: { temperature: 0.0, maxOutputTokens: 300 },
     });
@@ -599,12 +626,11 @@ const coerceBrief = (data: any, rawText?: string, metaDefaults?: Partial<Brief["
         }))
       : [];
 
+    // Don't auto-block based on AI response - moderation service handles blocking
+    // Only block if explicitly set by moderation service or if content is empty
     const blocked =
-      !!data.blocked ||
-      summary.length === 0 ||
-      risk === "prohibited" ||
-      risk === "high" ||
-      sensitive.some((c: string) => ["minors", "suicide", "sexual_exploitation", "crime", "violence"].includes(c.toLowerCase()));
+      !!data.blocked || // Only if explicitly blocked by moderation
+      summary.length === 0; // Or if no content
 
     const meta = data.meta && typeof data.meta === "object" ? data.meta : {};
 
@@ -714,55 +740,86 @@ const stripFooterForPublish = (contentWithFooter: string) => {
   return contentWithFooter.replace(/<!--\s*metadata:\s*({[\s\S]*?})\s*-->\s*$/m, "").trim();
 };
 
+// Clean technical jargon from article text to make it more human-readable
+const cleanTechnicalTerms = (text: string): string => {
+  if (!text) return text;
+  
+  // Replace technical terms with natural language
+  let cleaned = text;
+  
+  // Replace "first-order impact" with "immediate impact" or similar
+  cleaned = cleaned.replace(/\bfirst-order\s+impact(s)?\b/gi, "immediate impact$1");
+  cleaned = cleaned.replace(/\bfirst-order\s+effect(s)?\b/gi, "immediate effect$1");
+  cleaned = cleaned.replace(/\bfirst-order\s+consequence(s)?\b/gi, "immediate consequence$1");
+  
+  // Replace "second-order impact" with "broader impact" or similar
+  cleaned = cleaned.replace(/\bsecond-order\s+impact(s)?\b/gi, "broader impact$1");
+  cleaned = cleaned.replace(/\bsecond-order\s+effect(s)?\b/gi, "broader effect$1");
+  cleaned = cleaned.replace(/\bsecond-order\s+consequence(s)?\b/gi, "broader consequence$1");
+  
+  // Replace "third-order" with "long-term" or similar
+  cleaned = cleaned.replace(/\bthird-order\s+impact(s)?\b/gi, "long-term impact$1");
+  cleaned = cleaned.replace(/\bthird-order\s+effect(s)?\b/gi, "long-term effect$1");
+  cleaned = cleaned.replace(/\bthird-order\s+consideration(s)?\b/gi, "long-term consideration$1");
+  
+  // Remove confidence level tags like "(Confirmed)", "(Probable)", "(Unknown)" when they appear as standalone tags
+  cleaned = cleaned.replace(/\s*\(Confirmed\)/gi, "");
+  cleaned = cleaned.replace(/\s*\(Probable\)/gi, "");
+  cleaned = cleaned.replace(/\s*\(Unknown\)/gi, "");
+  
+  // Remove score references
+  cleaned = cleaned.replace(/\bconfidence\s+score[:\s]*\d+/gi, "");
+  cleaned = cleaned.replace(/\bscore[:\s]*\d+\s*\(out\s+of\s+\d+\)/gi, "");
+  
+  // Remove "degree of certainty" tags
+  cleaned = cleaned.replace(/\bdegree\s+of\s+certainty[:\s]*(Confirmed|Probable|Unknown)/gi, "");
+  
+  // Clean up any remaining technical metadata patterns
+  cleaned = cleaned.replace(/\btype:\s*(first_order|second_order)/gi, "");
+  
+  return cleaned.trim();
+};
+
 // -------------------- Sanitization Helper --------------------
 
 /**
  * sanitizeBriefForUser
- * - Remove admin/debug-only fields before returning to user-facing UI.
+ * - Prepares brief for user-facing UI by removing metadata footer from summary.
  * - Keeps essential fields: safe_title, summary (footer stripped), image_safe, risk_rating_adsense,
  *   risk_reason, sensitive_categories, implications, blocked, meta (reduced).
- *
- * If opts.admin === true, returns the full brief unchanged except the summary has footer stripped.
  */
-const sanitizeBriefForUser = (brief: Brief, opts?: { admin?: boolean }): Brief => {
-  if (opts?.admin) {
-    // Admin explicitly requested raw/admin view — return full object but remove metadata footer from summary
-    const clonedAdmin: Brief = JSON.parse(JSON.stringify(brief));
-    if (clonedAdmin.summary) clonedAdmin.summary = stripFooterForPublish(clonedAdmin.summary);
-    return clonedAdmin;
-  }
-
+const sanitizeBriefForUser = (brief: Brief): Brief => {
   const safeMeta = {
-    // hide exact model identifiers from end users for operational secrecy
-    model: brief.meta?.model ? "redacted" : "unknown",
+    model: brief.meta?.model || "unknown",
     fallback: !!brief.meta?.fallback,
     generatedAt: brief.meta?.generatedAt ?? new Date().toISOString(),
     qualityScore: typeof brief.meta?.qualityScore === "number" ? brief.meta.qualityScore : null,
     wordcount: typeof brief.meta?.wordcount === "number" ? brief.meta?.wordcount : null,
   };
 
+  // Clean the summary to remove any technical jargon
+  const cleanedSummary = cleanTechnicalTerms(stripFooterForPublish(brief.summary || ""));
+
   const sanitized: Brief = {
     safe_title: brief.safe_title,
-    // Remove any appended metadata/footer and trim; always use stripped body for users
-    summary: stripFooterForPublish(brief.summary || ""),
+    // Remove any appended metadata/footer, clean technical terms, and trim
+    summary: cleanedSummary,
     image_safe: !!brief.image_safe,
     risk_rating_adsense: brief.risk_rating_adsense,
     risk_reason: brief.risk_reason,
     sensitive_categories: Array.isArray(brief.sensitive_categories) ? [...brief.sensitive_categories] : [],
-    // Do not expose internal parsing flags to public
-    source_flags: [],
+    source_flags: Array.isArray(brief.source_flags) ? [...brief.source_flags] : [],
     blocked: !!brief.blocked,
     implications: Array.isArray(brief.implications)
       ? brief.implications.map((imp) => ({
           type: imp.type,
-          description: imp.description,
+          description: cleanTechnicalTerms(imp.description || ""),
           affected: Array.isArray(imp.affected) ? [...imp.affected] : [],
           confidence: imp.confidence,
           score: imp.score,
         }))
       : [],
     meta: safeMeta,
-    // raw omitted intentionally
   };
 
   return sanitized;
@@ -773,24 +830,23 @@ const sanitizeBriefForUser = (brief: Brief, opts?: { admin?: boolean }): Brief =
 /**
  * analyzeArticle: returns either markdown or structured JSON depending on outputMode
  * This function is a quick-analyze pathway (smaller token budget than generateFullArticle)
- * opts.admin === true -> returns admin view (raw fields included)
+ * Uses advanced model first, falls back to lite model for all users
  */
 export const analyzeArticle = async (
   articleTitle: string,
   articleSource: string,
-  opts?: { outputMode?: "markdown" | "json"; admin?: boolean }
+  opts?: { outputMode?: "markdown" | "json" }
 ) => {
   const outputMode: "markdown" | "json" = opts?.outputMode ?? "json";
-  const adminRequested = !!opts?.admin;
-  const hasPremium = checkPremiumAccess();
-  const preferred = hasPremium ? MODELS.BEST_FT : MODELS.LITE;
-  const fallbacks = [MODELS.STABLE_FLASH, MODELS.HIGH_THROUGHPUT];
+  // Start with advanced model for all users, fallback to lite
+  const preferred = MODELS.ADVANCED;
+  const fallbacks = [MODELS.LITE];
 
   // Detect implication categories
   const categories = detectImplicationCategories(articleTitle, "", articleSource);
 
-  // Extra instruction: produce a succinct TIB-style brief but keep token budget moderate.
-  const extra = `Produce a TIB-style brief. For Full Brief Mode aim for 300-450 words for quick analyze. Ensure no quotes or invented claims. If Sensitive Mode triggered, return 3-5 sentence neutral summary.`;
+  // Extra instruction: produce a journalistic TIB-style brief
+  const extra = `Produce a professional news-style brief written naturally. Aim for 350-500 words for quick analyze. Write as a journalist would - clear, engaging, accessible. Apply sophisticated reasoning but express it naturally. Identify patterns and implications, but explain them in plain language. Ensure no quotes or invented claims. Always produce full briefs - moderation is handled separately.`;
   const prompt = buildPrompt(articleTitle, "", articleSource, categories, extra, outputMode);
 
   try {
@@ -798,7 +854,7 @@ export const analyzeArticle = async (
       preferredModel: preferred,
       fallbacks,
       prompt,
-      options: { temperature: 0.0, maxOutputTokens: 900 },
+      options: { temperature: 0.0, maxOutputTokens: 1200 },
     });
     sendAnalyticsEvent({ event: "analyze_article_served", payload: { model: resp.usedModel } });
 
@@ -808,7 +864,7 @@ export const analyzeArticle = async (
       try {
         const parsed = JSON.parse(jsonText);
         const brief = coerceBrief(parsed, text, { model: resp.usedModel, fallback: resp.fallbackOccurred });
-        return sanitizeBriefForUser(brief, { admin: adminRequested });
+        return sanitizeBriefForUser(brief);
       } catch (e) {
         // fallback to heuristics below
       }
@@ -817,34 +873,71 @@ export const analyzeArticle = async (
     const heur = tryParseKeyValueFromText(text);
     if (heur && (heur.summary || heur.safe_title)) {
       const brief = coerceBrief(heur, text, { model: resp.usedModel, fallback: resp.fallbackOccurred });
-      return sanitizeBriefForUser(brief, { admin: adminRequested });
+      return sanitizeBriefForUser(brief);
     }
 
     const errBrief = makeErrorBrief("no_json_returned", { model: resp.usedModel, fallback: resp.fallbackOccurred });
-    return sanitizeBriefForUser(errBrief, { admin: adminRequested });
+    return sanitizeBriefForUser(errBrief);
   } catch (err: any) {
     console.error("analyzeArticle error", err);
     const errBrief = makeErrorBrief("model_failure", { model: "unknown", fallback: true });
-    return sanitizeBriefForUser(errBrief, { admin: adminRequested });
+    return sanitizeBriefForUser(errBrief);
   }
 };
 
 /**
  * generateFullArticle:
- * - Produces TIB-style Full Briefs (450-700 words) by default in Full Brief Mode.
+ * - Produces advanced TIB-style Full Briefs (500-800 words) by default in Full Brief Mode.
  * - outputMode=json returns strict JSON per schema.
- * - Caching, premium quality checks, and safety logic are included.
- * - opts.admin === true -> returns admin view (raw fields included)
+ * - Caching, quality checks, and safety logic are included.
+ * - Uses advanced model first for all users, falls back to lite model when needed
  */
 export const generateFullArticle = async (
   title: string,
   summary: string,
   source: string,
-  opts?: { forceRefresh?: boolean; publish?: boolean; outputMode?: "markdown" | "json"; targetWordCount?: number; admin?: boolean }
+  opts?: { forceRefresh?: boolean; publish?: boolean; outputMode?: "markdown" | "json"; targetWordCount?: number }
 ): Promise<Brief> => {
   const cacheKey = await getBriefCacheKey(title, source);
-  const adminRequested = !!opts?.admin;
   const hasPremium = checkPremiumAccess();
+
+  // Pre-moderation check: Moderate input content with timeout (non-blocking)
+  let inputModeration: ModerationResult | null = null;
+  try {
+    // Add timeout to pre-moderation (3 seconds max)
+    inputModeration = await Promise.race([
+      moderateArticle(title, summary, source, {
+        checkCopyright: false, // Skip for speed
+        strictMode: false, // Less strict for faster processing
+      }),
+      new Promise<ModerationResult>((resolve) =>
+        setTimeout(() => {
+          // On timeout, allow content through
+          resolve({
+            isSafe: true,
+            isBlocked: false,
+            riskLevel: "low",
+            categories: [],
+            reasons: [],
+            copyrightRisk: false,
+            confidence: 0.3,
+          });
+        }, 3000)
+      ),
+    ]);
+
+    // Only block if explicitly prohibited with high confidence
+    if (inputModeration && inputModeration.isBlocked && inputModeration.riskLevel === "prohibited") {
+      sendAnalyticsEvent({ event: "content_blocked_pre_moderation", payload: { reason: inputModeration.reasons } });
+      return sanitizeBriefForUser(makeErrorBrief("content_moderation_blocked", {
+        model: "moderation",
+        fallback: false,
+      }));
+    }
+  } catch (error) {
+    console.warn("Pre-moderation check failed, proceeding:", error);
+    // Continue on error - don't block content
+  }
 
   if (!opts?.forceRefresh) {
     const cached = readCache(cacheKey);
@@ -854,27 +947,64 @@ export const generateFullArticle = async (
         try { return JSON.parse(cached.payload); } catch { return null; }
       })() : cached.payload;
       const cachedBrief = coerceBrief(payload, undefined, { model: payload?.meta?.model || "cache", fallback: !!payload?.meta?.fallback });
-      return sanitizeBriefForUser(cachedBrief, { admin: adminRequested });
+      
+      // Re-check moderation on cached content with timeout (non-blocking)
+      try {
+        const cachedModeration = await Promise.race([
+          moderateArticle(title, cachedBrief.summary || summary, source, {
+            checkCopyright: false,
+            strictMode: false,
+          }),
+          new Promise<ModerationResult>((resolve) =>
+            setTimeout(() => {
+              resolve({
+                isSafe: true,
+                isBlocked: false,
+                riskLevel: "low",
+                categories: [],
+                reasons: [],
+                copyrightRisk: false,
+                confidence: 0.3,
+              });
+            }, 2000)
+          ),
+        ]);
+        
+        // Only block if explicitly prohibited
+        if (cachedModeration && cachedModeration.isBlocked && cachedModeration.riskLevel === "prohibited") {
+          sendAnalyticsEvent({ event: "cached_content_blocked", payload: { reason: cachedModeration.reasons } });
+          return sanitizeBriefForUser(makeErrorBrief("content_moderation_blocked", {
+            model: "moderation",
+            fallback: false,
+          }));
+        }
+      } catch (error) {
+        console.warn("Cached content moderation check failed:", error);
+        // Continue on error - don't block cached content
+      }
+      
+      return sanitizeBriefForUser(cachedBrief);
     }
   }
 
   // Detect categories
   const categories = detectImplicationCategories(title, summary, source);
 
-  const targetWord = opts?.targetWordCount ?? 550;
-  const extra = `Produce a TIB Full Brief with depth and reasoning. Target words: ${targetWord}. Surface drivers, near-term impacts, second-order effects, and 3 actionable signals. Provide structured implications array with first/second-order items and affected actors. DO NOT invent quotes or numbers. Mark unverified items as "unconfirmed".`;
+  const targetWord = opts?.targetWordCount ?? 600;
+  const extra = `Produce a professional news-style Full Brief written naturally. Target words: ${targetWord}. Write as a journalist would - clear, engaging, accessible. Apply sophisticated analytical thinking but express it in natural language. Discuss immediate effects, broader implications, and long-term consequences. Identify who is affected and how. Include thoughtful analysis of potential outcomes and alternative perspectives. Write flowing prose, not technical breakdowns. DO NOT use terms like "first-order", "second-order", "confidence", "score". DO NOT invent quotes or numbers. Mark unverified items as "unconfirmed".`;
 
   const prompt = buildPrompt(title, summary, source, categories, extra, opts?.outputMode ?? "json");
 
-  const preferred = hasPremium ? MODELS.BEST_FT : MODELS.LITE;
-  const fallbackChain = [MODELS.LITE, MODELS.STABLE_FLASH, MODELS.HIGH_THROUGHPUT];
+  // Start with advanced model for all users, fallback to lite
+  const preferred = MODELS.ADVANCED;
+  const fallbackChain = [MODELS.LITE];
 
   try {
     const resp = await makeModelCall({
       preferredModel: preferred,
       fallbacks: fallbackChain,
       prompt,
-      options: { temperature: 0.0, maxOutputTokens: 2200 }, // larger allowance for deep briefs
+      options: { temperature: 0.0, maxOutputTokens: 2800 }, // increased allowance for advanced deep briefs
     });
 
     const content = resp.text ?? "";
@@ -910,15 +1040,62 @@ export const generateFullArticle = async (
 
     let brief = coerceBrief(parsed, content, { model: resp.usedModel, fallback: resp.fallbackOccurred });
 
-    // Improve implications: if model didn't produce structured ones, attempt a targeted second-pass (cheap)
+    // Post-moderation check: Moderate generated content with timeout (non-blocking)
+    try {
+      const outputModeration = await Promise.race([
+        moderateArticle(title, brief.summary || summary, source, {
+          checkCopyright: false,
+          strictMode: false,
+        }),
+        new Promise<ModerationResult>((resolve) =>
+          setTimeout(() => {
+            // On timeout, allow content through
+            resolve({
+              isSafe: true,
+              isBlocked: false,
+              riskLevel: "low",
+              categories: [],
+              reasons: [],
+              copyrightRisk: false,
+              confidence: 0.3,
+            });
+          }, 3000)
+        ),
+      ]);
+
+      // Only block if explicitly prohibited with high confidence
+      if (outputModeration && outputModeration.isBlocked && outputModeration.riskLevel === "prohibited") {
+        sendAnalyticsEvent({ event: "generated_content_blocked", payload: { reason: outputModeration.reasons } });
+        // Update brief with moderation results
+        brief = {
+          ...brief,
+          blocked: true,
+          risk_rating_adsense: "prohibited",
+          risk_reason: getBlockReason(outputModeration),
+          sensitive_categories: outputModeration.categories,
+          source_flags: [...(brief.source_flags || []), "moderation_blocked"],
+        };
+      } else {
+        // Update risk rating based on moderation results (non-blocking)
+        if (outputModeration && (outputModeration.riskLevel === "high" || outputModeration.riskLevel === "medium")) {
+          brief.risk_rating_adsense = outputModeration.riskLevel;
+          brief.sensitive_categories = [...new Set([...brief.sensitive_categories, ...outputModeration.categories])];
+        }
+      }
+    } catch (error) {
+      console.warn("Post-moderation check failed:", error);
+      // Continue on error - don't block generated content
+    }
+
+    // Improve implications: if model didn't produce structured ones, attempt a targeted second-pass
     if ((!brief.implications || brief.implications.length === 0) && !brief.blocked) {
       try {
-        const impPrompt = `${SYSTEM_INSTRUCTIONS}\n\nBased on the following title and summary, produce a JSON array named "implications" with up to 6 items. Each item: {type: "first_order"|"second_order", description: string (short), affected: [actors], confidence: "Confirmed"|"Probable"|"Unknown", score: <0-100>}.\n\nTitle: ${JSON.stringify(title)}\nSummary: ${JSON.stringify(brief.summary)}\n\nReturn only JSON object: { "implications": [...] }`;
+        const impPrompt = `${SYSTEM_INSTRUCTIONS}\n\nBased on the following title and summary, produce a JSON array named "implications" with up to 8 items. Each item: {type: "first_order"|"second_order", description: string (written naturally as a journalist would), affected: [actors], confidence: "Confirmed"|"Probable"|"Unknown", score: <0-100>}. Write descriptions in natural, accessible language - avoid technical jargon. Apply multi-layered thinking to identify systemic impacts.\n\nTitle: ${JSON.stringify(title)}\nSummary: ${JSON.stringify(brief.summary)}\n\nReturn only JSON object: { "implications": [...] }`;
         const impResp = await makeModelCall({
           preferredModel: preferred,
           fallbacks: fallbackChain,
           prompt: impPrompt,
-          options: { temperature: 0.0, maxOutputTokens: 400 },
+          options: { temperature: 0.0, maxOutputTokens: 600 },
         });
         const jt = extractFirstJsonObject(impResp.text ?? "");
         if (jt.jsonText) {
@@ -942,8 +1119,8 @@ export const generateFullArticle = async (
       }
     }
 
-    // quality check for premium users when we have a summary and not blocked
-    if (hasPremium && brief.summary && !brief.blocked) {
+    // Quality check for all users when we have a summary and not blocked
+    if (brief.summary && !brief.blocked) {
       const q = await runQualityCheck(brief.summary, source);
       brief = {
         ...brief,
@@ -960,15 +1137,15 @@ export const generateFullArticle = async (
 
     sendAnalyticsEvent({ event: "ai_brief_generated", payload: { model: resp.usedModel, fallback: resp.fallbackOccurred } });
 
-    return sanitizeBriefForUser(brief, { admin: adminRequested });
+    return sanitizeBriefForUser(brief);
   } catch (err: any) {
     console.error("generateFullArticle error", err);
-    if (isQuotaError(err) && !checkPremiumAccess()) {
+    if (isQuotaError(err)) {
       const errBrief = makeErrorBrief("quota_exhausted", { fallback: true, model: "quota" });
-      return sanitizeBriefForUser(errBrief, { admin: adminRequested });
+      return sanitizeBriefForUser(errBrief);
     }
     const errBrief = makeErrorBrief("service_unavailable", { fallback: true, model: "unknown" });
-    return sanitizeBriefForUser(errBrief, { admin: adminRequested });
+    return sanitizeBriefForUser(errBrief);
   }
 };
 
@@ -977,10 +1154,8 @@ export const generateFullArticle = async (
  * produceMorningBrief: aggregate a list of article briefs (titles + sources).
  * This is a simple aggregator that requests brief summaries for each and combines them into a short "morning brief".
  * NOTE: This is a scaffold — integrate with your article store and scheduling system.
- * opts.admin === true -> returns admin items (raw included)
  */
-export const produceMorningBrief = async (items: { title: string; source: string; summary?: string }[], opts?: { targetCount?: number; admin?: boolean }) => {
-  const adminRequested = !!opts?.admin;
+export const produceMorningBrief = async (items: { title: string; source: string; summary?: string }[], opts?: { targetCount?: number }) => {
   // pick top N
   const target = opts?.targetCount ?? 6;
   const subset = items.slice(0, target);
@@ -988,7 +1163,7 @@ export const produceMorningBrief = async (items: { title: string; source: string
   // get briefs in parallel with concurrency limits (using semaphore)
   const promises = subset.map(async (it) => {
     try {
-      return await generateFullArticle(it.title, it.summary ?? "", it.source, { forceRefresh: false, outputMode: "json", targetWordCount: 220, admin: adminRequested });
+      return await generateFullArticle(it.title, it.summary ?? "", it.source, { forceRefresh: false, outputMode: "json", targetWordCount: 250 });
     } catch (e) {
       return makeErrorBrief("item_fetch_failed", { model: "unknown" }) as Brief;
     }
@@ -996,10 +1171,10 @@ export const produceMorningBrief = async (items: { title: string; source: string
 
   const results = await Promise.all(promises);
 
-  // assemble morning brief markdown using sanitized results for public
+  // assemble morning brief markdown using sanitized results
   const header = `# The Intellectual Brief — Morning Brief\n\nTop ${results.length} stories.\n\n`;
   const body = results.map((b, idx) => {
-    const safe = sanitizeBriefForUser(b, { admin: adminRequested });
+    const safe = sanitizeBriefForUser(b);
     if (safe.blocked) {
       return `${idx + 1}. **${safe.safe_title}** — [blocked due to safety].`;
     }
@@ -1009,14 +1184,14 @@ export const produceMorningBrief = async (items: { title: string; source: string
 
   return {
     markdown: `${header}${body}`,
-    items: results.map((r) => sanitizeBriefForUser(r, { admin: adminRequested })),
+    items: results.map((r) => sanitizeBriefForUser(r)),
   };
 };
 
 // -------------------- UI helper --------------------
 export const generateArticleJsonForUi = async (title: string, summary: string, source: string) => {
-  // default public view (admin=false) — returns sanitized JSON brief for UI
-  const brief = await generateFullArticle(title, summary, source, { forceRefresh: false, publish: true, outputMode: "json", targetWordCount: 550, admin: false });
+  // Returns sanitized JSON brief for UI with advanced analysis
+  const brief = await generateFullArticle(title, summary, source, { forceRefresh: false, publish: true, outputMode: "json", targetWordCount: 600 });
   return brief;
 };
 
