@@ -2,7 +2,8 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { Article, Category } from '../types';
 import { fetchNews } from '../services/newsService';
 import ArticleCard from './ArticleCard';
-import { Icons, AD_CONFIG, TBLogo } from '../constants.tsx';
+import { Icons, AD_CONFIG } from '../constants.tsx';
+import logo from '/assets/logo.png';
 import SmartLoader from './SmartLoader';
 import AdUnit from './AdUnit';
 import { storeArticle } from '../utils/articleStorage';
@@ -29,7 +30,7 @@ const NewsFeed: React.FC<NewsFeedProps> = ({ activeCategory, searchQuery, onSele
     try {
       const response = await fetchNews(activeCategory, searchQuery, countryParam);
       setArticles(response.articles);
-      
+
       // Store all articles in localStorage cache so they're available when clicked
       response.articles.forEach(article => {
         storeArticle(article);
@@ -102,10 +103,10 @@ const NewsFeed: React.FC<NewsFeedProps> = ({ activeCategory, searchQuery, onSele
           <div className="w-full h-px bg-neutral-200 dark:bg-neutral-800" />
 
           {/* Ad Unit */}
-          <AdUnit 
-            slot={AD_CONFIG.slots.feed} 
+          <AdUnit
+            slot={AD_CONFIG.slots.feed}
             format="horizontal"
-            className="w-full" 
+            className="w-full"
             lazy={true}
             minHeight="250px"
           />
@@ -129,7 +130,7 @@ const NewsFeed: React.FC<NewsFeedProps> = ({ activeCategory, searchQuery, onSele
         /* Empty State */
         <div className="flex flex-col items-center justify-center py-32 md:py-48 text-center bg-neutral-50 dark:bg-neutral-900/20 border border-neutral-100 dark:border-neutral-800">
           <div className="mb-8 text-neutral-200 dark:text-neutral-800">
-            <TBLogo className="w-20 h-20 md:w-32 md:h-32" />
+            <img src={logo} alt="Logo" className="w-20 h-20 md:w-32 md:h-32 opacity-20" />
           </div>
           <h3 className="text-2xl md:text-3xl font-serif font-medium text-neutral-900 dark:text-white mb-4">
             The Wire is Silent

@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { Icons, TBLogo } from '../constants.tsx';
+import { Link } from 'react-router-dom';
+import { Icons } from '../constants.tsx';
 import { useAuth } from '../context/AuthContext';
+import { useSubscription } from '../context/SubscriptionContext';
 import logo from '/assets/logo.png';
 interface NavbarProps {
   onSearch: (query: string) => void;
@@ -14,6 +16,7 @@ const Navbar: React.FC<NavbarProps> = ({ onSearch, onMenuClick, theme, onToggleT
   const [inputValue, setInputValue] = useState('');
   const [showMobileSearch, setShowMobileSearch] = useState(false);
   const { user, logout } = useAuth();
+  const { isPremium } = useSubscription();
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -84,17 +87,50 @@ const Navbar: React.FC<NavbarProps> = ({ onSearch, onMenuClick, theme, onToggleT
               {theme === 'dark' ? <Icons.Sun className="w-5 h-5" /> : <Icons.Moon className="w-5 h-5" />}
             </button>
 
+            {/* Pricing Link */}
+            <Link
+              to="/pricing"
+              className="hidden sm:block px-4 py-2 text-xs font-serif text-neutral-600 dark:text-neutral-400 hover:text-primary transition-colors"
+            >
+              Pricing
+            </Link>
+
             {user ? (
               <div className="relative group">
                 <button className="flex items-center gap-2 sm:gap-3 pl-2 pr-1 py-1 hover:opacity-70 transition-opacity">
                   <span className="hidden sm:block text-xs font-bold uppercase tracking-widest text-neutral-900 dark:text-white">
                     {user.name}
                   </span>
+                  {isPremium && (
+                    <span className="hidden sm:block text-[8px] font-bold uppercase tracking-[0.2em] text-primary border border-primary px-2 py-0.5">
+                      Premium
+                    </span>
+                  )}
                   <div className="w-8 h-8 bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center text-xs font-serif font-bold text-neutral-900 dark:text-white border border-neutral-200 dark:border-neutral-700">
                     {user.name.charAt(0)}
                   </div>
                 </button>
                 <div className="absolute right-0 mt-4 w-48 bg-paper dark:bg-paper-dark rounded-none shadow-2xl border border-neutral-200 dark:border-neutral-800 hidden group-hover:block animate-fade-in z-50">
+                  <Link
+                    to="/account"
+                    className="block w-full text-left px-6 py-4 text-sm font-serif italic text-neutral-600 dark:text-neutral-400 hover:text-primary hover:bg-neutral-50 dark:hover:bg-white/5 transition-colors"
+                  >
+                    Account
+                  </Link>
+                  <Link
+                    to="/settings"
+                    className="block w-full text-left px-6 py-4 text-sm font-serif italic text-neutral-600 dark:text-neutral-400 hover:text-primary hover:bg-neutral-50 dark:hover:bg-white/5 transition-colors"
+                  >
+                    Settings
+                  </Link>
+                  {!isPremium && (
+                    <Link
+                      to="/pricing"
+                      className="block w-full text-left px-6 py-4 text-sm font-serif italic text-neutral-600 dark:text-neutral-400 hover:text-primary hover:bg-neutral-50 dark:hover:bg-white/5 transition-colors"
+                    >
+                      Upgrade to Premium
+                    </Link>
+                  )}
                   <button
                     onClick={logout}
                     className="w-full text-left px-6 py-4 text-sm font-serif italic text-neutral-600 dark:text-neutral-400 hover:text-primary hover:bg-neutral-50 dark:hover:bg-white/5 transition-colors"

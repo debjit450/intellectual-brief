@@ -6,7 +6,7 @@ import { generateSlug, extractIdFromSlug } from '../utils/slug';
 import { fetchNews } from '../services/newsService';
 import ArticleDetail from '../components/ArticleDetail';
 import SmartLoader from '../components/SmartLoader';
-import { TBLogo } from '../constants.tsx';
+import logo from '/assets/logo.png';
 import { getArticleById, getAllCachedArticles, storeArticle } from '../utils/articleStorage';
 
 const ArticlePage: React.FC = () => {
@@ -194,7 +194,7 @@ const ArticlePage: React.FC = () => {
         </Helmet>
         <div className="min-h-screen bg-paper dark:bg-paper-dark flex items-center justify-center px-4">
           <div className="text-center max-w-md">
-            <TBLogo className="w-20 h-20 mx-auto mb-6 text-neutral-300 dark:text-neutral-700" />
+            <img src={logo} alt="Logo" className="w-20 h-20 mx-auto mb-6 opacity-30" />
             <h1 className="text-3xl font-serif font-medium text-ink dark:text-ink-dark mb-4">
               Article Not Found
             </h1>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { CATEGORIES, ICONS, TBLogo, AD_CONFIG } from '../constants.tsx';
+import { CATEGORIES, ICONS, AD_CONFIG } from '../constants.tsx';
 import { Category } from '../types';
 import AdUnit from './AdUnit';
 import logo from '/assets/logo.png';

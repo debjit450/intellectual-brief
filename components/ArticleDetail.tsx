@@ -1,13 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
+import { Link } from 'react-router-dom';
 import { Article } from '../types';
 import { generateFullArticle } from '../services/geminiService';
 import { Icons, TBLogo, AD_CONFIG } from '../constants.tsx';
+import { useSubscription } from '../context/SubscriptionContext';
 import ReactMarkdown from 'react-markdown';
 import logo from '/assets/logo.png';
 import { generateSlug } from '../utils/slug';
 import { storeArticle } from '../utils/articleStorage';
 import AdUnit from './AdUnit';
+import { Crown, ArrowRight } from 'lucide-react';
 
 interface ArticleDetailProps {
   article: Article;
@@ -18,9 +21,16 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
   const [fullContent, setFullContent] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [imageError, setImageError] = useState(false);
+  const { isPremium } = useSubscription();
 
   // --- NEW: share feedback state ---
   const [shareFeedback, setShareFeedback] = useState<string | null>(null);
+  
+  // Check if content is premium-only or service unavailable
+  const isPremiumContent = fullContent?.includes('ONLY AVAILABLE IN PAID PLANS') || false;
+  const isServiceUnavailable = fullContent?.includes('Service Temporarily Unavailable') || 
+                               fullContent?.includes('Service Unavailable') || false;
+  const showUpgradePrompt = (isPremiumContent || isServiceUnavailable) && !isPremium;
 
   const articleSlug = generateSlug(article.title, article.id);
   // Always use canonical domain (non-www) for SEO consistency
@@ -262,7 +272,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
         <meta name="rating" content="general" />
 
         {/* AI Bot Optimizations - ChatGPT, Perplexity, Claude, etc. */}
-        <meta name="ai:model" content="gpt-4, claude-3, gemini-pro" />
+        <meta name="ai:model" content="gpt-4, claude-3" />
         <meta name="ai:content-type" content="news-article" />
         <meta name="ai:category" content={article.category || "Technology"} />
         <meta name="ai:source" content={article.source || ""} />
@@ -461,7 +471,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
             </div>
           ) : (
             <div className="w-full aspect-[21/9] mb-12 flex items-center justify-center bg-neutral-100 dark:bg-neutral-900/50 border border-neutral-200 dark:border-neutral-800">
-              <TBLogo className="w-12 h-12 text-neutral-200 dark:text-neutral-800" />
+              <img src={logo} alt="Logo" className="w-12 h-12 opacity-20" />
             </div>
           )}
 
@@ -483,7 +493,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
             <div className="flex items-center justify-center my-12 opacity-30">
               <div className="w-16 h-px bg-neutral-400"></div>
               <div className="px-4">
-                <TBLogo className="w-4 h-4" />
+                <img src={logo} alt="Logo" className="w-4 h-4" />
               </div>
               <div className="w-16 h-px bg-neutral-400"></div>
             </div>
@@ -499,6 +509,58 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
               </div>
             ) : (
               <>
+                {/* Upgrade Prompt for Premium Content or Service Unavailable */}
+                {showUpgradePrompt && (
+                  <div className="my-12 p-8 bg-gradient-to-r from-primary/10 to-primary/5 dark:from-primary/20 dark:to-primary/10 border-2 border-primary/30 rounded-none">
+                    <div className="flex items-start gap-4 mb-6">
+                      <Crown className="w-6 h-6 text-primary flex-shrink-0 mt-1" />
+                      <div className="flex-1">
+                        <h3 className="text-2xl font-serif font-medium text-ink dark:text-ink-dark mb-3">
+                          {isPremiumContent ? 'Premium Content' : 'Service Temporarily Unavailable'}
+                        </h3>
+                        <p className="text-neutral-700 dark:text-neutral-300 font-serif leading-relaxed mb-6">
+                          {isPremiumContent
+                            ? 'This article contains premium content that requires a Premium or Enterprise subscription to access.'
+                            : 'Our AI service is currently at capacity. Premium subscribers have priority access and alternative AI models.'}
+                        </p>
+                        <div className="space-y-3 mb-6">
+                          <p className="text-sm font-serif font-medium text-ink dark:text-ink-dark">
+                            Upgrade to Premium to get:
+                          </p>
+                          <ul className="space-y-2 text-sm font-serif text-neutral-700 dark:text-neutral-300">
+                            <li className="flex items-center gap-2">
+                              <span className="text-primary">✓</span>
+                              {isPremiumContent ? 'Access to premium article content' : 'Priority access when service is exhausted'}
+                            </li>
+                            <li className="flex items-center gap-2">
+                              <span className="text-primary">✓</span>
+                              Unlimited AI-generated briefs
+                            </li>
+                            <li className="flex items-center gap-2">
+                              <span className="text-primary">✓</span>
+                              Ad-free experience
+                            </li>
+                            <li className="flex items-center gap-2">
+                              <span className="text-primary">✓</span>
+                              Early access to new features
+                            </li>
+                          </ul>
+                        </div>
+                        <Link
+                          to="/pricing"
+                          className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-white font-bold text-[10px] uppercase tracking-[0.2em] hover:bg-primary/90 transition-colors"
+                        >
+                          Upgrade to Premium
+                          <ArrowRight className="w-4 h-4" />
+                        </Link>
+                        <p className="text-xs text-neutral-500 dark:text-neutral-500 font-serif italic mt-4">
+                          Payment gateway integration coming soon. Contact us for early access.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="markdown-body text-neutral-900 dark:text-neutral-300 animate-fade-in" itemProp="articleBody">
                   <ReactMarkdown
                     components={{
@@ -549,7 +611,28 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
                           className="border-l-2 border-primary pl-6 my-8 italic text-neutral-600 dark:text-neutral-400 text-xl"
                           {...props}
                         />
-                      )
+                      ),
+                      a: ({ node, ...props }) => {
+                        const href = props.href || '';
+                        if (href.startsWith('/')) {
+                          return (
+                            <Link
+                              to={href}
+                              className="text-primary hover:underline"
+                              {...props}
+                            />
+                          );
+                        }
+                        return (
+                          <a
+                            href={href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary hover:underline"
+                            {...props}
+                          />
+                        );
+                      },
                     }}
                   >
                     {fullContent ||

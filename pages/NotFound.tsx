@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { TBLogo, Icons } from '../constants.tsx';
+import { Icons } from '../constants.tsx';
+import { TBLogo } from '../constants.tsx';
 import logo from '/assets/logo.png';
 
 const NotFound: React.FC = () => {
@@ -40,7 +41,7 @@ const NotFound: React.FC = () => {
         <div className="flex items-center justify-center my-12 opacity-30">
           <div className="w-16 h-px bg-neutral-400"></div>
           <div className="px-4">
-            <TBLogo className="w-4 h-4" />
+            <img src={logo} alt="Logo" className="w-4 h-4" />
           </div>
           <div className="w-16 h-px bg-neutral-400"></div>
         </div>
