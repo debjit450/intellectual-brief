@@ -4,7 +4,7 @@ import { GoogleGenAI } from "@google/genai";
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 // -------------------- Config --------------------
-const AI_BRIEF_CACHE_PREFIX = "tib_ai_brief_v3";
+const AI_BRIEF_CACHE_PREFIX = "tib_ai_brief_v4";
 const CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 7; // 7 days (non-premium)
 const PREMIUM_CACHE_TTL_MS = CACHE_TTL_MS * 4; // 28 days
 const MAX_CONCURRENT_REQUESTS = 4;
@@ -162,7 +162,8 @@ const SYSTEM_INSTRUCTIONS = `
 SYSTEM INSTRUCTIONS (STRICT)
 - You are a senior technology journalist and analyst. Produce accurate, evidence-first writing.
 - Never fabricate quotes, numbers, or citations. If a specific fact is not present in the provided source or summary, state uncertainty explicitly (e.g., "not specified", "according to the source", "unconfirmed").
-- When asked for implications for investors or developers, provide clear numbered points with concrete reasoning.
+- When asked for "implications", consider the entire audience: readers, consumers, households, small businesses, policymakers, educators, and technologists — not only developers or investors.
+- Provide clear, practical, and digestible action points or takeaways for everyday readers as well as sector stakeholders.
 - Indicate degree of certainty for background facts: (Confirmed / Probable / Unknown).
 - Do NOT invent URLs. Only include URLs if they are present in the provided source string.
 - Keep word counts within requested bounds. If asked for 600-800 words, aim for ~700 and do not include visible wordcount lines in the article body.
@@ -184,7 +185,11 @@ USER INSTRUCTIONS:
 RESPONSE FORMAT:
 - Do NOT prepend or append any visible read-time or wordcount lines. Only the canonical footer (HTML comment) is allowed.
 - Use Markdown with sections: Lead, Analysis, Conclusion.
-- Include a 3-point "Implications" section for developers/investors.
+- Include a 3-point "Implications" section that provides distinct, practical takeaways for:
+  1) everyday readers / consumers (what to know or do),
+  2) small businesses / local operators (practical considerations),
+  3) policymakers / educators / technologists (policy, product, or system-level implications).
+  (Keep each implication 1-2 sentences; be concrete and avoid jargon.)
 - At the end append ONE HTML comment: <!-- metadata: { "model":"<id>", "fallback":<bool>, "generatedAt":"<ISO>", "qualityScore": <0-100|null>, "wordcount": <int> } -->
 `.trim();
 };
@@ -300,36 +305,20 @@ type GenMeta = {
   rawLegacy?: string[]; // removed legacy bits
 };
 
-/**
- * Remove any visible wordcount/read-time hints (aggressive).
- * Strips lines like:
- *  - "Estimated word count: ~715"
- *  - "Estimated word count: 700 words"
- *  - "~700 words"
- *  - "Estimated read time: 3 min"
- *  - "Reading time: 3 min"
- * anywhere in the document, with emphasis on top-of-file lines.
- */
 const removeVisibleWordcountHints = (s: string) => {
   if (!s) return s;
-  // common patterns to remove
   const patterns = [
-    // lines starting with "Estimated word count" or "Estimated read time"
     /^\s*Estimated\s+word\s+count[:\s]*~?\d+\b.*$\n?/gim,
     /^\s*Estimated\s+read\s+time[:\s]*[^\n]*$\n?/gim,
     /^\s*Reading\s+time[:\s]*[^\n]*$\n?/gim,
-    // "~700 words" or "700 words" at start of file or standalone line
     /^\s*~?\d{2,4}\s*(words|word)\b.*$\n?/gim,
-    // "Estimated word count: ~700" anywhere
     /Estimated\s+word\s+count[:\s]*~?\d+\b/ig,
-    // any obvious leading line with "Estimated word count" phrasing
     /^\s*Estimated\s+word\s+count.*$\n?/gim,
   ];
   let out = s;
   for (const re of patterns) {
     out = out.replace(re, "");
   }
-  // Also remove stray leading tildes like "~700" lines
   out = out.replace(/^\s*~\d{2,4}\s*$/m, "");
   return out.trim();
 };
@@ -338,7 +327,7 @@ const normalizeGeneratedContent = (raw: string): { contentWithFooter: string; bo
   const resultMeta: GenMeta = { qualityScore: null, wordcount: null, rawLegacy: [] };
   let content = raw ?? "";
 
-  // 0) Aggressively remove any visible wordcount/read-time hints early
+  // 0) Aggressively remove visible wordcount/read-time hints early
   content = removeVisibleWordcountHints(content);
 
   // 1) Extract canonical footer: <!-- metadata: { ... } -->
@@ -403,14 +392,13 @@ const normalizeGeneratedContent = (raw: string): { contentWithFooter: string; bo
 
 // -------------------- Helper: stripFooterForPublish --------------------
 const stripFooterForPublish = (contentWithFooter: string) => {
-  // remove the HTML comment footer if present
   return contentWithFooter.replace(/<!--\s*metadata:\s*({[\s\S]*?})\s*-->\s*$/m, "").trim();
 };
 
 // -------------------- Public API --------------------
 
 /**
- * analyzeArticle: 3-point summary (high-throughput)
+ * analyzeArticle: 3-point summary for general audiences
  */
 export const analyzeArticle = async (articleTitle: string, articleSource: string) => {
   const hasPremium = checkPremiumAccess();
@@ -420,14 +408,15 @@ export const analyzeArticle = async (articleTitle: string, articleSource: string
   const prompt = `
 ${SYSTEM_INSTRUCTIONS}
 
-Task: Provide a concise 3-point executive summary for:
+Task: Provide a concise 3-point executive summary for the article:
 Title: ${JSON.stringify(articleTitle)}
 Source: ${JSON.stringify(articleSource)}
 
 Constraints:
 - 3 bullet points, each 1-2 sentences.
-- One-line implication for investors/developers per bullet.
-- If uncertain, use "Reportedly" or "According to the source".
+- For each bullet, include a one-line practical takeaway targeted at: everyday readers (what to know or do), small businesses/local operators, and policymakers/technologists (brief).
+- Avoid jargon; be accessible to a general audience.
+- If uncertain, use "According to the source" or "Not specified".
 `.trim();
 
   try {
@@ -435,7 +424,7 @@ Constraints:
       preferredModel: preferred,
       fallbacks,
       prompt,
-      options: { temperature: 0.0, maxOutputTokens: 200 },
+      options: { temperature: 0.0, maxOutputTokens: 220 },
     });
     sendAnalyticsEvent({ event: "analyze_article_served", payload: { model: resp.usedModel } });
     return resp.text ?? null;
@@ -486,7 +475,7 @@ export const generateFullArticle = async (
 
   const userInstructions = `
 Please produce a full news article (600-800 words). Keep objective tone, do not invent quotes, mark uncertain claims.
-Include a 3-point "Implications" section for developers/investors.
+Include a 3-point "Implications" section that gives practical, non-technical takeaways for everyday readers, small businesses, and policymakers/technologists.
 `;
 
   const prompt = buildPrompt(title, summary, source, userInstructions);
