@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { Link } from 'react-router-dom';
 import { Article } from '../types';
@@ -11,25 +11,100 @@ import { generateSlug } from '../utils/slug';
 import { storeArticle } from '../utils/articleStorage';
 import AdUnit from './AdUnit';
 import { Crown, ArrowRight } from 'lucide-react';
+import { containsSensitiveKeywords } from '../utils/safety';
 
 interface ArticleDetailProps {
   article: Article;
   onClose: () => void;
 }
 
+type BriefPayload = {
+  safe_title?: string;
+  summary?: string;
+  risk_rating_adsense?: string;
+  risk_reason?: string;
+  image_safe?: boolean;
+  sensitive_categories?: string[];
+  source_flags?: string[];
+  blocked?: boolean;
+  meta?: any;
+  raw?: string;
+};
+
+const coerceClientBrief = (data: any): BriefPayload => {
+  if (!data || typeof data !== "object") {
+    return {
+      safe_title: "Summary unavailable",
+      summary: "",
+      image_safe: false,
+      risk_rating_adsense: "prohibited",
+      sensitive_categories: [],
+      source_flags: ["invalid_payload"],
+      blocked: true,
+    };
+  }
+
+  const summary = typeof data.summary === "string" ? data.summary.trim() : "";
+  const risk = (data.risk_rating_adsense || "").toString().toLowerCase();
+  const sensitive = Array.isArray(data.sensitive_categories)
+    ? data.sensitive_categories.filter((c: any) => typeof c === "string" && c.trim().length > 0)
+    : [];
+  const sourceFlags = Array.isArray(data.source_flags)
+    ? data.source_flags.filter((c: any) => typeof c === "string" && c.trim().length > 0)
+    : [];
+  const hasSensitiveText = containsSensitiveKeywords(
+    `${summary} ${data.safe_title || ""} ${data.raw || ""}`
+  );
+
+  const blocked =
+    !!data.blocked ||
+    summary.length === 0 ||
+    risk === "prohibited" ||
+    risk === "high" ||
+    hasSensitiveText ||
+    sensitive.some((c: string) =>
+      ["minors", "suicide", "sexual_exploitation", "crime", "violence", "hate", "mass_casualty", "graphic_harm"].includes(
+        c.toLowerCase()
+      )
+    );
+
+  return {
+    safe_title: typeof data.safe_title === "string" && data.safe_title.trim() ? data.safe_title.trim() : "Summary",
+    summary,
+    risk_rating_adsense: risk || "medium",
+    risk_reason: typeof data.risk_reason === "string" ? data.risk_reason : undefined,
+    image_safe: data.image_safe !== false && !blocked,
+    sensitive_categories: sensitive,
+    source_flags: sourceFlags,
+    blocked,
+    meta: data.meta,
+    raw: typeof data.raw === "string" ? data.raw : undefined,
+  };
+};
+
 const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
   const [fullContent, setFullContent] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [imageError, setImageError] = useState(false);
+  const [briefData, setBriefData] = useState<BriefPayload | null>(null);
+  const [blocked, setBlocked] = useState(false);
   const { isPremium } = useSubscription();
 
   // --- NEW: share feedback state ---
   const [shareFeedback, setShareFeedback] = useState<string | null>(null);
-  
+  const articleTextBlob = useMemo(
+    () => `${article.title} ${article.summary} ${article.category || ""}`,
+    [article]
+  );
+  const locallySensitive = useMemo(
+    () => containsSensitiveKeywords(articleTextBlob),
+    [articleTextBlob]
+  );
+
   // Check if content is premium-only or service unavailable
   const isPremiumContent = fullContent?.includes('ONLY AVAILABLE IN PAID PLANS') || false;
-  const isServiceUnavailable = fullContent?.includes('Service Temporarily Unavailable') || 
-                               fullContent?.includes('Service Unavailable') || false;
+  const isServiceUnavailable = fullContent?.includes('Service Temporarily Unavailable') ||
+    fullContent?.includes('Service Unavailable') || false;
   const showUpgradePrompt = (isPremiumContent || isServiceUnavailable) && !isPremium;
 
   const articleSlug = generateSlug(article.title, article.id);
@@ -83,8 +158,8 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
     : new Date().toISOString();
 
   // Estimate word count from content (will update when fullContent loads)
-  const currentContent = fullContent || article.summary || '';
-  const wordCount = currentContent.split(/\s+/).length;
+  const currentContent = (briefData?.summary || fullContent || article.summary || '').trim();
+  const wordCount = currentContent.split(/\s+/).filter(Boolean).length;
 
   useEffect(() => {
     let isMounted = true;
@@ -97,22 +172,44 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
     // For now, we'll allow scrolling since it's a full page
 
     const loadFullArticle = async () => {
+      if (locallySensitive) {
+        const flagged = coerceClientBrief({
+          summary: "",
+          safe_title: "Summary unavailable",
+          risk_rating_adsense: "prohibited",
+          risk_reason: "Content blocked for safety",
+          sensitive_categories: ["locally_blocked"],
+          blocked: true,
+        });
+        setBriefData(flagged);
+        setBlocked(true);
+        setFullContent("");
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       try {
-        const text = await generateFullArticle(
+        const result = await generateFullArticle(
           article.title,
           article.summary,
-          article.source
+          article.source,
+          { outputMode: "json" }
         );
-        if (isMounted) {
-          setFullContent(text);
-        }
+
+        if (!isMounted) return;
+
+        const normalized = coerceClientBrief(result);
+        setBriefData(normalized);
+        setBlocked(!!normalized.blocked);
+        setFullContent(normalized.summary || "");
       } catch (err) {
         console.error("Failed to load full article:", err);
         if (isMounted) {
-          setFullContent(
-            "## Service Temporarily Unavailable\n\nThe dispatch for this topic cannot be retrieved at this moment. Please verify the connection or consult the original source directly."
-          );
+          const fallback = coerceClientBrief(null);
+          setBriefData(fallback);
+          setBlocked(true);
+          setFullContent("");
         }
       } finally {
         if (isMounted) {
@@ -126,7 +223,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
     return () => {
       isMounted = false;
     };
-  }, [article]);
+  }, [article, locallySensitive]);
 
   // --- NEW: Share handler (Web Share + clipboard fallback) ---
   const handleShare = async () => {
@@ -165,6 +262,31 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
 
   // Enhanced JSON-LD for this article (NewsArticle with comprehensive metadata)
   // This will be updated when fullContent loads via useEffect
+  const allowAds = useMemo(() => {
+    if (!briefData) return !blocked;
+    const risk = (briefData.risk_rating_adsense || "").toLowerCase();
+    return !blocked && risk !== "prohibited" && risk !== "high";
+  }, [briefData, blocked]);
+
+  const imageAllowed = useMemo(() => {
+    if (blocked) return false;
+    if (!briefData) return !imageError;
+    const sensitiveList = (briefData.sensitive_categories || []).map((c) => c?.toLowerCase?.() || "");
+    const hasSensitive = sensitiveList.some((c) =>
+      ["minors", "suicide", "sexual_exploitation", "crime", "violence", "hate", "mass_casualty", "graphic_harm"].includes(c)
+    );
+    return briefData.image_safe !== false && !hasSensitive && !imageError;
+  }, [briefData, blocked, imageError]);
+
+  const isSensitiveMode = useMemo(() => {
+    const risk = (briefData?.risk_rating_adsense || "").toLowerCase();
+    const sensitiveList = (briefData?.sensitive_categories || []).map((c) => c?.toLowerCase?.() || "");
+    const hasSensitive = sensitiveList.some((c) =>
+      ["minors", "suicide", "sexual_exploitation", "crime", "violence", "hate", "mass_casualty", "graphic_harm"].includes(c)
+    );
+    return blocked || risk === "high" || risk === "prohibited" || hasSensitive;
+  }, [briefData, blocked]);
+
   const articleLd = React.useMemo(() => ({
     "@context": "https://schema.org",
     "@type": "NewsArticle",
@@ -203,7 +325,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
     },
     "mainEntityOfPage": {
       "@type": "WebPage",
-      "@id": articleUrl
+      "@id": article.url || articleUrl
     },
     "url": articleUrl,
     "datePublished": publishedDate,
@@ -227,7 +349,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
 
   // Separate ImageObject schema for Google Images search optimization
   const imageLd = React.useMemo(() => {
-    if (!article.imageUrl) return null;
+    if (!article.imageUrl || !imageAllowed) return null;
     return {
       "@context": "https://schema.org",
       "@type": "ImageObject",
@@ -342,20 +464,20 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
         <meta name="geo.region" content="US" />
         <meta name="geo.placename" content="United States" />
         <meta name="ICBM" content="39.8283, -98.5795" />
-        
+
         {/* Microsoft/Bing specific */}
         <meta name="msvalidate.01" content="" />
         <meta name="msapplication-TileColor" content="#141414" />
-        
+
         {/* Apple specific */}
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        
+
         {/* Additional Open Graph for better social sharing */}
         <meta property="og:image:type" content="image/jpeg" />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
-        
+
         {/* Article specific meta */}
         <meta name="article:published_time" content={publishedDate} />
         <meta name="article:modified_time" content={publishedDate} />
@@ -363,7 +485,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
         <meta name="article:author" content="The Intellectual Brief" />
         <meta name="article:section" content={article.category || "Technology"} />
         <meta name="article:tag" content={article.category || "Technology"} />
-        
+
         {/* DC (Dublin Core) metadata for better indexing */}
         <meta name="DC.title" content={article.title} />
         <meta name="DC.creator" content="The Intellectual Brief" />
@@ -429,7 +551,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
             <a
               href={article.url}
               target="_blank"
-              rel="noreferrer"
+              rel="noopener noreferrer"
               className="flex items-center gap-2 px-4 py-2 bg-neutral-900 dark:bg-neutral-100 text-white dark:text-black text-[10px] uppercase tracking-[0.15em] font-medium hover:opacity-80 transition-opacity"
             >
               <span className="hidden md:inline">Original</span> Source{" "}
@@ -474,7 +596,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
           </header>
 
           {/* Hero Image - Optimized for SEO and Google Images */}
-          {article.imageUrl && !imageError ? (
+          {article.imageUrl && imageAllowed ? (
             <div className="w-full aspect-[21/9] mb-12 overflow-hidden bg-neutral-100 dark:bg-neutral-900 shadow-sm animate-fade-in">
               <img
                 src={article.imageUrl}
@@ -492,16 +614,118 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
               />
             </div>
           ) : (
-            <div className="w-full aspect-[21/9] mb-12 flex items-center justify-center bg-neutral-100 dark:bg-neutral-900/50 border border-neutral-200 dark:border-neutral-800">
+            <div className="w-full aspect-[21/9] mb-12 flex flex-col items-center justify-center gap-3 bg-neutral-100 dark:bg-neutral-900/50 border border-neutral-200 dark:border-neutral-800 text-sm text-neutral-500">
               <img src={logo} alt="Logo" className="w-12 h-12 opacity-20" />
+              <span className="text-xs uppercase tracking-[0.2em]">Image hidden for safety</span>
             </div>
           )}
 
           {/* Article Body */}
           <article className="prose prose-lg prose-neutral dark:prose-invert max-w-none font-serif leading-loose" itemScope itemType="https://schema.org/NewsArticle">
-            <p className="lead text-xl md:text-2xl text-neutral-800 dark:text-neutral-200 italic font-medium mb-12 leading-relaxed" itemProp="description">
-              {article.summary}
+            <p className="lead text-xl md:text-2xl text-neutral-800 dark:text-neutral-200 font-medium mb-6 leading-relaxed" itemProp="description">
+              {briefData?.safe_title || article.title}
             </p>
+
+            <div className="text-sm text-neutral-500 dark:text-neutral-400 uppercase tracking-[0.18em] mb-6">
+              AI-generated brief — please read the original source.
+            </div>
+
+            <div className="markdown-body text-neutral-900 dark:text-neutral-300 animate-fade-in" itemProp="articleBody">
+              {isSensitiveMode ? (
+                <div className="rounded-none border border-amber-200 dark:border-amber-800 bg-amber-50/80 dark:bg-amber-900/20 p-4 mb-6">
+                  {blocked ? (
+                    <div className="text-neutral-700 dark:text-neutral-200 space-y-3">
+                      <div className="font-semibold uppercase text-[11px] tracking-[0.24em] text-primary">Summary unavailable</div>
+                      <p className="font-serif leading-relaxed">
+                        This brief is blocked due to sensitive content or policy risk. Please read the original article directly.
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="font-serif text-lg md:text-xl leading-[1.8] text-neutral-800 dark:text-neutral-100">
+                      {currentContent || "Summary unavailable at this time."}
+                    </p>
+                  )}
+
+                </div>
+              ) : (
+                <ReactMarkdown
+                  components={{
+                    h1: ({ node, ...props }) => (
+                      <h2
+                        className="text-2xl md:text-3xl font-medium mt-16 mb-6 font-serif text-ink dark:text-ink-dark"
+                        {...props}
+                      />
+                    ),
+                    h2: ({ node, ...props }) => (
+                      <h2
+                        className="text-xl md:text-2xl font-medium mt-16 mb-6 font-serif border-b border-neutral-200 dark:border-neutral-800 pb-3"
+                        {...props}
+                      />
+                    ),
+                    h3: ({ node, ...props }) => (
+                      <h3
+                        className="text-lg md:text-xl font-medium mt-10 mb-4 font-serif text-primary"
+                        {...props}
+                      />
+                    ),
+                    p: ({ node, ...props }) => (
+                      <p
+                        className="mb-6 font-serif text-lg md:text-xl leading-[1.8] text-neutral-700 dark:text-neutral-300"
+                        {...props}
+                      />
+                    ),
+                    ul: ({ node, ...props }) => (
+                      <ul className="list-none pl-0 mb-8 space-y-4" {...props} />
+                    ),
+                    li: ({ node, ...props }) => (
+                      <li
+                        className="flex gap-4 text-lg md:text-xl font-serif text-neutral-700 dark:text-neutral-300"
+                        {...props}
+                      >
+                        <span className="text-primary mt-1.5 text-xs">◆</span>
+                        <span>{props.children}</span>
+                      </li>
+                    ),
+                    strong: ({ node, ...props }) => (
+                      <strong
+                        className="font-bold text-neutral-900 dark:text-white"
+                        {...props}
+                      />
+                    ),
+                    blockquote: ({ node, ...props }) => (
+                      <blockquote
+                        className="border-l-2 border-primary pl-6 my-8 italic text-neutral-600 dark:text-neutral-400 text-xl"
+                        {...props}
+                      />
+                    ),
+                    a: ({ node, ...props }) => {
+                      const href = props.href || '';
+                      if (href.startsWith('/')) {
+                        return (
+                          <Link
+                            to={href}
+                            className="text-primary hover:underline"
+                            {...props}
+                          />
+                        );
+                      }
+                      return (
+                        <a
+                          href={href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline"
+                          {...props}
+                        />
+                      );
+                    },
+                  }}
+                >
+                  {fullContent ||
+                    "## Service Temporarily Unavailable\n\nThe dispatch for this topic cannot be retrieved at this moment. Please verify the connection or consult the original source directly."}
+                </ReactMarkdown>
+              )}
+            </div>
 
             {/* First In-Content Ad - After Summary */}
             <AdUnit
@@ -583,87 +807,8 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
                   </div>
                 )}
 
-                <div className="markdown-body text-neutral-900 dark:text-neutral-300 animate-fade-in" itemProp="articleBody">
-                  <ReactMarkdown
-                    components={{
-                      h1: ({ node, ...props }) => (
-                        <h2
-                          className="text-2xl md:text-3xl font-medium mt-16 mb-6 font-serif text-ink dark:text-ink-dark"
-                          {...props}
-                        />
-                      ),
-                      h2: ({ node, ...props }) => (
-                        <h2
-                          className="text-xl md:text-2xl font-medium mt-16 mb-6 font-serif border-b border-neutral-200 dark:border-neutral-800 pb-3"
-                          {...props}
-                        />
-                      ),
-                      h3: ({ node, ...props }) => (
-                        <h3
-                          className="text-lg md:text-xl font-medium mt-10 mb-4 font-serif text-primary"
-                          {...props}
-                        />
-                      ),
-                      p: ({ node, ...props }) => (
-                        <p
-                          className="mb-6 font-serif text-lg md:text-xl leading-[1.8] text-neutral-700 dark:text-neutral-300"
-                          {...props}
-                        />
-                      ),
-                      ul: ({ node, ...props }) => (
-                        <ul className="list-none pl-0 mb-8 space-y-4" {...props} />
-                      ),
-                      li: ({ node, ...props }) => (
-                        <li
-                          className="flex gap-4 text-lg md:text-xl font-serif text-neutral-700 dark:text-neutral-300"
-                          {...props}
-                        >
-                          <span className="text-primary mt-1.5 text-xs">◆</span>
-                          <span>{props.children}</span>
-                        </li>
-                      ),
-                      strong: ({ node, ...props }) => (
-                        <strong
-                          className="font-bold text-neutral-900 dark:text-white"
-                          {...props}
-                        />
-                      ),
-                      blockquote: ({ node, ...props }) => (
-                        <blockquote
-                          className="border-l-2 border-primary pl-6 my-8 italic text-neutral-600 dark:text-neutral-400 text-xl"
-                          {...props}
-                        />
-                      ),
-                      a: ({ node, ...props }) => {
-                        const href = props.href || '';
-                        if (href.startsWith('/')) {
-                          return (
-                            <Link
-                              to={href}
-                              className="text-primary hover:underline"
-                              {...props}
-                            />
-                          );
-                        }
-                        return (
-                          <a
-                            href={href}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-primary hover:underline"
-                            {...props}
-                          />
-                        );
-                      },
-                    }}
-                  >
-                    {fullContent ||
-                      "## Service Temporarily Unavailable\n\nThe dispatch for this topic cannot be retrieved at this moment. Please verify the connection or consult the original source directly."}
-                  </ReactMarkdown>
-                </div>
-
-                {/* Middle In-Content Ad - Only show if content is substantial */}
-                {fullContent && fullContent.length > 1500 && (
+                {/* Middle In-Content Ad - Only show if content is substantial and safe */}
+                {!isSensitiveMode && fullContent && fullContent.length > 1500 && (
                   <AdUnit
                     slot={AD_CONFIG.slots.articleMiddle}
                     format="rectangle"
@@ -685,11 +830,39 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
             />
           </article>
 
-          <div className="mt-24 pt-12 border-t border-neutral-200 dark:border-neutral-800 flex flex-col items-center text-center">
-            <img src={logo} alt="Logo" className="w-10 h-10 object-contain mb-10" />
-            <p className="text-[10px] text-neutral-400 uppercase tracking-[0.2em] font-medium">
-              The Intellectual Brief • Exclusive Report
-            </p>
+          <div className="mt-24 pt-12 border-t border-neutral-200 dark:border-neutral-800 flex flex-col items-center text-center space-y-4">
+            <img src={logo} alt="Logo" className="w-10 h-10 object-contain" />
+            <div className="text-sm text-neutral-600 dark:text-neutral-300">
+              <span className="font-semibold">Original source: </span>
+              <a
+                href={article.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary underline"
+              >
+                {article.source}
+              </a>
+            </div>
+            <div className="text-xs text-neutral-500 dark:text-neutral-400">
+              This is an AI-generated summary. Always read the full original for complete context.
+            </div>
+            <div className="flex flex-wrap items-center justify-center gap-3 text-sm">
+              <a
+                href={article.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-neutral-900 dark:bg-neutral-100 text-white dark:text-black text-[10px] uppercase tracking-[0.2em] font-medium hover:opacity-80 transition-opacity"
+              >
+                Read Original
+                <Icons.ExternalLink className="w-3 h-3" />
+              </a>
+              <a
+                href={`mailto:legal@theintellectualbrief.online?subject=Takedown%20Request%20${encodeURIComponent(article.title)}&body=Please%20include%20URL%3A%20${encodeURIComponent(article.url || articleUrl)}%0AReason%3A%0AEvidence%3A`}
+                className="inline-flex items-center gap-2 px-4 py-2 border border-neutral-300 dark:border-neutral-700 text-[10px] uppercase tracking-[0.2em] font-medium hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+              >
+                Report / DMCA
+              </a>
+            </div>
           </div>
         </div>
       </div>

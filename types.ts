@@ -19,7 +19,26 @@ export interface User {
   bookmarks: string[]; // Array of Article IDs
 }
 
-export type Category = 'Technology' | 'Business' | 'Artificial Intelligence' | 'Venture Capital' | 'Markets' | 'Policy';
+export type Category =
+  | "Top"
+  | "World"
+  | "Business"
+  | "Markets"
+  | "Technology"
+  | "Artificial Intelligence"
+  | "Venture Capital"
+  | "Politics"
+  | "Policy"
+  | "Science"
+  | "Sports"
+  | "Health"
+  | "Entertainment"
+  | "Environment"
+  | "Education"
+  | "Lifestyle"
+  | "Food"
+  | "Tourism"
+  | "Other";
 
 export interface GroundingMetadata {
   groundingChunks?: Array<{

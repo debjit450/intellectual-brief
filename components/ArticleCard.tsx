@@ -4,6 +4,7 @@ import { Article } from '../types';
 import { Icons } from '../constants.tsx';
 import logo from '/assets/logo.png';
 import { generateSlug } from '../utils/slug';
+import { containsSensitiveKeywords } from '../utils/safety';
 
 // Helper function to format country display
 const formatCountry = (countryCode?: string, countryName?: string): string | null => {
@@ -32,6 +33,9 @@ const ArticleCard: React.FC<ArticleCardProps> = ({
 
   const [imageError, setImageError] = useState(false);
   const hasImage = !!article.imageUrl && !imageError;
+  const textBlob = `${article.title} ${article.summary} ${article.category || ""}`;
+  const isSensitivePreview = containsSensitiveKeywords(textBlob);
+  const showImage = hasImage && !isSensitivePreview;
   const articleSlug = generateSlug(article.title, article.id);
   const articleUrl = `/article/${articleSlug}`;
 
@@ -42,7 +46,7 @@ const ArticleCard: React.FC<ArticleCardProps> = ({
         className="group relative w-full cursor-pointer block"
       >
         <div className="relative aspect-[16/9] md:aspect-[21/9] w-full overflow-hidden mb-8 bg-neutral-100 dark:bg-neutral-900 border border-neutral-100 dark:border-neutral-800">
-          {hasImage ? (
+          {showImage ? (
             <img
               src={article.imageUrl}
               alt={article.title}
@@ -77,7 +81,7 @@ const ArticleCard: React.FC<ArticleCardProps> = ({
           </h2>
 
           <p className="text-lg md:text-xl text-neutral-600 dark:text-neutral-400 font-serif leading-relaxed max-w-2xl line-clamp-3">
-            {article.summary}
+            {isSensitivePreview ? "Content hidden for safety. Open for a minimal brief." : article.summary}
           </p>
 
           <div className="flex items-center gap-6 mt-4">
@@ -132,7 +136,7 @@ const ArticleCard: React.FC<ArticleCardProps> = ({
         {article.summary}
       </p>
 
-      {hasImage ? (
+      {showImage ? (
         <div className="mt-auto">
           <div className="relative w-full aspect-[3/2] overflow-hidden bg-neutral-100 dark:bg-neutral-900 grayscale group-hover:grayscale-0 transition-all duration-700">
             <img

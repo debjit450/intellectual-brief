@@ -230,34 +230,56 @@ SYSTEM INSTRUCTIONS (STRICT)
 - At the end append a single HTML comment EXACTLY like: <!-- metadata: { "model":"<id>", "fallback":<bool>, "generatedAt":"<ISO>", "qualityScore": <0-100|null>, "wordcount": <int> } -->
 `.trim();
 
+const SAFETY_BRIEF_RULES = `
+SAFETY AND COMPLIANCE RULES (MANDATORY)
+- Rephrase everything; do not copy sentences, quotes, structure, or narrative flow from the source.
+- Two-mode logic:
+  * Sensitive Mode triggers if the source involves minors, suicide/self-harm, sexual exploitation, crime, violence, hate, mass casualty events, or graphic harm. In this mode produce ONLY a 3-5 sentence neutral factual summary, no opinions or analysis, no predictions, no sensational wording, and mark any uncertainty as "unconfirmed". Risk must be High or Prohibited, ads are off, and image_safe is false by default unless clearly safe.
+  * Full Brief Mode for all other cases. Produce a 200-400 word analytical brief with the following Markdown sections in order: "1. Executive Summary" (3-4 sentences), "2. Key Developments / What Happened", "3. Analysis", "4. Implications" (only include relevant categories; omit if none), "5. Outlook" (short, trend-based), "6. Ad Safety Assessment", "7. Image Safety". Analysis is allowed only in this mode.
+- Sensitive handling: avoid emotional language, graphic details, or speculation. Do not assign motives. Only state confirmed facts. Mark uncertain claims as "unconfirmed".
+- Image safety: if the source implies minors, victims, crime scenes, or other sensitive imagery, set image_safe to false; otherwise true. If unsure, set false.
+- Editorial: no opinions, predictions, or moral judgments in Sensitive Mode. In Full Brief Mode, analysis must stay evidence-first and non-sensational.
+- Misinformation: explicitly mark unverified claims as "unconfirmed". Never present speculation as fact.
+- Output must stay neutral, formal, and advertiser friendly. Do not include visible word-count lines or model IDs.
+`.trim();
+
 // Build prompt that includes only relevant implication categories.
 const buildPrompt = (title: string, summary: string, source: string, categories: ImplicationCategory[], extra?: string, outputMode: "markdown" | "json" = "markdown") => {
   const categoriesList = categories.includes("none") ? "none" : categories.join(", ");
 
-  const implicationInstructions = categories.includes("none")
-    ? "If no meaningful implications exist, write: 'No major implications identified beyond general awareness.'"
-    : `Include an \"Implications\" section with concrete 1-2 sentence takeaways targeted to these categories (only the listed categories): ${categoriesList}.`;
-
-  const jsonSchemaNote = outputMode === "json" ? `\n- REQUIRED JSON SCHEMA: {\n  title: string,\n  body_markdown: string,\n  implications: [{ category: string, text: string }],\n  meta: { model: string, fallback: boolean, generatedAt: string, qualityScore: number|null, wordcount: number }\n}\n- Return only valid JSON matching this schema. No extra text.` : "";
+  const jsonSchemaNote =
+    outputMode === "json"
+      ? `\n- REQUIRED JSON SCHEMA (strict): {\n  safe_title: string,\n  summary: string, // 3-5 sentences, neutral, factual, own words\n  risk_rating_adsense: "low" | "medium" | "high" | "prohibited",\n  risk_reason: string,\n  image_safe: boolean,\n  sensitive_categories: string[], // any of: minors, suicide, sexual_exploitation, crime, violence, hate, other\n  source_flags: string[], // list unconfirmed or sensitive signals\n  blocked: boolean,\n  meta: { model: string, fallback: boolean, generatedAt: string, qualityScore: number|null, wordcount: number|null },\n  raw?: string\n}\n- Return only valid JSON. No extra text.`
+      : "";
 
   return `
 ${SYSTEM_INSTRUCTIONS}
+${SAFETY_BRIEF_RULES}
 
 USER INSTRUCTIONS:
-- Task: Write a full news article (600-800 words) with analysis and a concluding thought.
+- Task: Produce a safety-compliant brief with the required fields.
 - Headline: ${JSON.stringify(title)}
 - Source context: ${JSON.stringify(source)}
-- Summary: ${JSON.stringify(summary)}
+- Existing summary or notes: ${JSON.stringify(summary)}
+- Relevant implication categories (for awareness, not for output unless applicable): ${categoriesList}
 - Extra: ${extra ?? ""}
 
-${implicationInstructions}
+OUTPUT REQUIREMENTS:
+- safe_title: short, neutral, non-sensational.
+- summary: 
+  * If Sensitive Mode: exactly 3-5 sentences, concise, factual, no analysis, no outlook. 
+  * If Full Brief Mode: 200-400 words in Markdown with these sections in order: "1. Executive Summary" (3-4 sentences), "2. Key Developments / What Happened", "3. Analysis", "4. Implications" (omit if none), "5. Outlook", "6. Ad Safety Assessment", "7. Image Safety".
+- risk_rating_adsense: Low/Medium/High/Prohibited with a one-line reason based only on confirmed facts. If Sensitive Mode, set to High or Prohibited.
+- image_safe: true if no indication of minors, crime victims, or sensitive imagery; false if any doubt or sensitive cues appear (default to false in Sensitive Mode).
+- sensitive_categories: list any that apply from [minors, suicide, sexual_exploitation, crime, violence, hate, mass_casualty, graphic_harm]; use [] if none are present.
+- source_flags: include "unconfirmed" for any uncertain claims; include relevant sensitive signals.
+- blocked: boolean flag if summary should not be shown to end users (true if sensitive + ads unsafe).
+- Avoid emotional language, speculation, or invented details. Do not copy structure or phrases from the source. Analysis is only allowed in Full Brief Mode.
 
 ${jsonSchemaNote}
 
 RESPONSE FORMAT:
-- Use Markdown with sections: Lead, Analysis, Conclusion (unless outputMode=json).
-- For each implication provide a 1-2 sentence practical takeaway and a degree of certainty (Confirmed/Probable/Unknown).
-- At the end append ONE HTML comment footer: <!-- metadata: { "model":"<id>", "fallback":<bool>, "generatedAt":"<ISO>", "qualityScore": <0-100|null>, "wordcount": <int> } -->
+- Return strict JSON per schema. Do not include Markdown, headers, or any extra text.
 `.trim();
 };
 
@@ -303,7 +325,8 @@ const makeModelCall = async ({
             REQUEST_TIMEOUT_MS
           );
 
-          const text = resp?.text ?? resp?.output ?? (typeof resp === "string" ? resp : null);
+          const anyResp: any = resp as any;
+          const text = anyResp?.text ?? anyResp?.output ?? (typeof resp === "string" ? resp : null);
 
           sendAnalyticsEvent({ event: "model_request_success", payload: { model, attempt } });
 
@@ -373,6 +396,95 @@ type GenMeta = {
   qualityScore?: number | null;
   wordcount?: number | null;
   rawLegacy?: string[];
+};
+
+// Canonical brief shape returned to the frontend
+type Brief = {
+  safe_title: string;
+  summary: string;
+  image_safe: boolean;
+  risk_rating_adsense: "low" | "medium" | "high" | "prohibited" | string;
+  risk_reason?: string;
+  sensitive_categories: string[];
+  source_flags: string[];
+  blocked: boolean;
+  meta: {
+    model: string;
+    fallback: boolean;
+    generatedAt: string;
+    qualityScore: number | null;
+    wordcount: number | null;
+  };
+  raw?: string; // optional raw model output for admin/debug only
+};
+
+const makeErrorBrief = (reason: string, meta?: Partial<Brief["meta"]>): Brief => ({
+  safe_title: "Summary unavailable",
+  summary: "",
+  image_safe: false,
+  risk_rating_adsense: "prohibited",
+  risk_reason: reason,
+  sensitive_categories: [],
+  source_flags: ["parse_error"],
+  blocked: true,
+  meta: {
+    model: meta?.model ?? "unknown",
+    fallback: !!meta?.fallback,
+    generatedAt: meta?.generatedAt ?? new Date().toISOString(),
+    qualityScore: typeof meta?.qualityScore === "number" ? meta.qualityScore : null,
+    wordcount: typeof meta?.wordcount === "number" ? meta.wordcount : null,
+  },
+});
+
+const coerceBrief = (data: any, rawText?: string, metaDefaults?: Partial<Brief["meta"]>): Brief => {
+  try {
+    if (!data || typeof data !== "object") {
+      return makeErrorBrief("invalid_payload", metaDefaults);
+    }
+
+    const summary = typeof data.summary === "string" ? data.summary.trim() : "";
+    const safeTitle = typeof data.safe_title === "string" && data.safe_title.trim().length > 0 ? data.safe_title.trim() : "Summary";
+    const imageSafe = data.image_safe !== false;
+    const risk = (data.risk_rating_adsense || "").toString().toLowerCase() as Brief["risk_rating_adsense"];
+    const sensitive = Array.isArray(data.sensitive_categories)
+      ? data.sensitive_categories.filter((c: any) => typeof c === "string" && c.trim().length > 0)
+      : [];
+    const sourceFlags = Array.isArray(data.source_flags)
+      ? data.source_flags.filter((c: any) => typeof c === "string" && c.trim().length > 0)
+      : [];
+    const blocked =
+      !!data.blocked ||
+      summary.length === 0 ||
+      risk === "prohibited" ||
+      risk === "high" ||
+      sensitive.some((c: string) => ["minors", "suicide", "sexual_exploitation", "crime", "violence"].includes(c.toLowerCase()));
+
+    const meta = data.meta && typeof data.meta === "object" ? data.meta : {};
+
+    const qualityScore = typeof meta.qualityScore === "number" ? meta.qualityScore : null;
+    const wordcount = typeof meta.wordcount === "number" ? meta.wordcount : summary.split(/\s+/).filter(Boolean).length || null;
+
+    return {
+      safe_title: safeTitle,
+      summary,
+      image_safe: imageSafe && !blocked,
+      risk_rating_adsense: risk || "medium",
+      risk_reason: typeof data.risk_reason === "string" ? data.risk_reason : undefined,
+      sensitive_categories: sensitive,
+      source_flags: sourceFlags,
+      blocked,
+      meta: {
+        model: meta.model || metaDefaults?.model || "unknown",
+        fallback: !!meta.fallback || !!metaDefaults?.fallback,
+        generatedAt: meta.generatedAt || metaDefaults?.generatedAt || new Date().toISOString(),
+        qualityScore,
+        wordcount,
+      },
+      raw: typeof rawText === "string" ? rawText : undefined,
+    };
+  } catch (e) {
+    return makeErrorBrief("coercion_failed", metaDefaults);
+  }
 };
 
 const removeVisibleWordcountHints = (s: string) => {
@@ -464,6 +576,7 @@ export const analyzeArticle = async (
   articleSource: string,
   opts?: { outputMode?: "markdown" | "json" }
 ) => {
+  const forcedOutputMode: "json" = "json";
   const hasPremium = checkPremiumAccess();
   const preferred = hasPremium ? MODELS.BEST_FT : MODELS.LITE;
   const fallbacks = [MODELS.STABLE_FLASH, MODELS.HIGH_THROUGHPUT];
@@ -471,11 +584,14 @@ export const analyzeArticle = async (
   // Detect implication categories first
   const categories = detectImplicationCategories(articleTitle, "", articleSource);
 
-  const prompt = `
-${SYSTEM_INSTRUCTIONS}
-
-Task: Provide a concise 3-point executive summary for the article:\nTitle: ${JSON.stringify(articleTitle)}\nSource: ${JSON.stringify(articleSource)}\n\nConstraints:\n- 3 bullet points, each 1-2 sentences.\n- For each bullet, include a 1-line practical takeaway targeted at each relevant implication category: ${categories.join(", ")}.\n- Output as ${opts?.outputMode === "json" ? "strict JSON matching schema" : "Markdown"}.
-`.trim();
+  const prompt = buildPrompt(
+    articleTitle,
+    "",
+    articleSource,
+    categories,
+    "Return only the safety-compliant brief.",
+    forcedOutputMode
+  );
 
   try {
     const resp = await makeModelCall({
@@ -486,24 +602,20 @@ Task: Provide a concise 3-point executive summary for the article:\nTitle: ${JSO
     });
     sendAnalyticsEvent({ event: "analyze_article_served", payload: { model: resp.usedModel } });
 
-    if (opts?.outputMode === "json") {
-      // Attempt to extract JSON
-      const text = resp.text ?? "";
-      const jMatch = text.match(/\{[\s\S]*\}/);
-      if (jMatch) {
-        try {
-          return JSON.parse(jMatch[0]);
-        } catch (e) {
-          return { error: "invalid_json", raw: text };
-        }
+    const text = resp.text ?? "";
+    const jMatch = text.match(/\{[\s\S]*\}/);
+    if (jMatch) {
+      try {
+        const parsed = JSON.parse(jMatch[0]);
+        return coerceBrief(parsed, text, { model: resp.usedModel, fallback: resp.fallbackOccurred });
+      } catch (e) {
+        return makeErrorBrief("invalid_json_analyze", { model: resp.usedModel, fallback: resp.fallbackOccurred });
       }
-      return { raw: text };
     }
-
-    return resp.text ?? null;
+    return makeErrorBrief("no_json_returned", { model: resp.usedModel, fallback: resp.fallbackOccurred });
   } catch (err: any) {
     console.error("analyzeArticle error", err);
-    return null;
+    return makeErrorBrief("model_failure", { model: "unknown", fallback: true });
   }
 };
 
@@ -518,27 +630,23 @@ export const generateFullArticle = async (
   summary: string,
   source: string,
   opts?: { forceRefresh?: boolean; publish?: boolean; outputMode?: "markdown" | "json" }
-): Promise<string | { body: string; meta: any; full: string } | any> => {
+): Promise<Brief> => {
   const cacheKey = await getBriefCacheKey(title, source);
   const hasPremium = checkPremiumAccess();
   const isPremium = isPremiumContent(title, source);
 
   if (isPremium && !hasPremium) {
-    const gated = "## ONLY AVAILABLE IN PAID PLANS\n\nThis article contains premium content that requires a Premium or Enterprise subscription. [Upgrade now](/pricing) to access exclusive in-depth analyses, premium intelligence briefs, and priority access to our AI-powered news analysis.";
+    const gated = makeErrorBrief("premium_gated", { model: "gated", fallback: true });
     writeCache(cacheKey, gated, CACHE_TTL_MS);
-    return opts?.publish === false ? { body: gated, meta: { gated: true }, full: gated } : gated;
+    return gated;
   }
 
   if (!opts?.forceRefresh) {
     const cached = readCache(cacheKey);
     if (cached) {
       sendAnalyticsEvent({ event: "ai_brief_cache_hit", payload: { key: cacheKey } });
-      const cachedFull = cached.payload as string;
-      const normalized = normalizeGeneratedContent(cachedFull);
-      if (opts?.publish === false) {
-        return { body: normalized.body, meta: normalized.meta, full: normalized.contentWithFooter };
-      }
-      return normalized.body;
+      const payload = typeof cached.payload === "string" ? (() => { try { return JSON.parse(cached.payload); } catch { return null; } })() : cached.payload;
+      return coerceBrief(payload, undefined, { model: payload?.meta?.model || "cache", fallback: !!payload?.meta?.fallback });
     }
   }
 
@@ -546,8 +654,8 @@ export const generateFullArticle = async (
   const categories = detectImplicationCategories(title, summary, source);
 
   // Build prompt
-  const userInstructions = `\nPlease produce a full news article (600-800 words). Keep objective tone, do not invent quotes, mark uncertain claims. If outputMode=json is requested, return strictly valid JSON only (no trailing text).\n`;
-  const prompt = buildPrompt(title, summary, source, categories, userInstructions, opts?.outputMode ?? "markdown");
+  const userInstructions = `\nApply the two-mode logic: if any sensitive triggers are present (minors, suicide/self-harm, sexual exploitation, crime, violence, hate, mass casualty events, graphic harm) use Sensitive Mode with only a 3-5 sentence neutral factual summary and set risk to High or Prohibited, image_safe false by default, ads off. Otherwise use Full Brief Mode with a 200-400 word analytical brief using the required sections; make it executive-grade and more advanced (depth, reasoning, context) while staying factual and concise. Always rephrase, avoid quotes, avoid copying phrasing or structure, and mark uncertain claims as "unconfirmed". Do not include any content that could trigger copyright strikes. Return strict JSON when outputMode=json.\n`;
+  const prompt = buildPrompt(title, summary, source, categories, userInstructions, "json");
 
   const preferred = hasPremium ? MODELS.BEST_FT : MODELS.LITE;
   const fallbackChain = hasPremium
@@ -562,85 +670,41 @@ export const generateFullArticle = async (
       options: { temperature: 0.0, maxOutputTokens: 1200 },
     });
 
-    let content = resp.text ?? "";
+    const content = resp.text ?? "";
+    let parsed: any = null;
 
-    // If JSON output expected, try parse
-    if (opts?.outputMode === "json") {
-      const jMatch = content.match(/\{[\s\S]*\}/);
-      if (jMatch) {
-        try {
-          const parsed = JSON.parse(jMatch[0]);
-          // attach meta
-          parsed.meta = parsed.meta ?? {};
-          parsed.meta.model = resp.usedModel ?? parsed.meta.model ?? "unknown";
-          parsed.meta.fallback = !!resp.fallbackOccurred;
-          parsed.meta.generatedAt = parsed.meta.generatedAt ?? new Date().toISOString();
-
-          // quality check for premium
-          if (hasPremium && parsed.body_markdown) {
-            const q = await runQualityCheck(parsed.body_markdown, source);
-            parsed.meta.qualityScore = q.score ?? null;
-          }
-
-          // cache the canonical serialized JSON
-          writeCache(cacheKey, JSON.stringify(parsed), hasPremium ? PREMIUM_CACHE_TTL_MS : CACHE_TTL_MS);
-
-          sendAnalyticsEvent({ event: "ai_brief_generated", payload: { model: resp.usedModel, fallback: resp.fallbackOccurred } });
-          return parsed;
-        } catch (e) {
-          // fallthrough to normalization
-        }
-      }
-    }
-
-    // Normalize (extract footer, remove legacy lines and visible wordcount hints)
-    const normalized = normalizeGeneratedContent(content);
-    const fullWithFooter = normalized.contentWithFooter;
-    let body = normalized.body;
-
-    // Optional quality check for premium users (we inject into cached footer only)
-    if (hasPremium && body) {
-      const q = await runQualityCheck(body, source);
+    const jMatch = content.match(/\{[\s\S]*\}/);
+    if (jMatch) {
       try {
-        const footerRegex = /<!--\s*metadata:\s*({[\s\S]*?})\s*-->\s*$/m;
-        const footerMatch = fullWithFooter.match(footerRegex);
-        if (footerMatch) {
-          const parsed = JSON.parse(footerMatch[1]);
-          parsed.qualityScore = Number(q.score);
-          parsed.generatedAt = parsed.generatedAt ?? new Date().toISOString();
-          const updatedFull = `${body}\n\n<!-- metadata: ${JSON.stringify(parsed)} -->`;
-          writeCache(cacheKey, updatedFull, hasPremium ? PREMIUM_CACHE_TTL_MS : CACHE_TTL_MS);
-        } else {
-          const freshMeta = {
-            model: resp.usedModel ?? "unknown",
-            fallback: !!resp.fallbackOccurred,
-            generatedAt: new Date().toISOString(),
-            qualityScore: q.score ?? null,
-            wordcount: body.split(/\s+/).filter(Boolean).length,
-          };
-          const updatedFull = `${body}\n\n<!-- metadata: ${JSON.stringify(freshMeta)} -->`;
-          writeCache(cacheKey, updatedFull, hasPremium ? PREMIUM_CACHE_TTL_MS : CACHE_TTL_MS);
-        }
+        parsed = JSON.parse(jMatch[0]);
       } catch (e) {
-        writeCache(cacheKey, fullWithFooter, hasPremium ? PREMIUM_CACHE_TTL_MS : CACHE_TTL_MS);
+        parsed = null;
       }
-    } else {
-      writeCache(cacheKey, fullWithFooter, hasPremium ? PREMIUM_CACHE_TTL_MS : CACHE_TTL_MS);
     }
+
+    let brief = coerceBrief(parsed, content, { model: resp.usedModel, fallback: resp.fallbackOccurred });
+
+    // quality check for premium users when we have a summary and not blocked
+    if (hasPremium && brief.summary && !brief.blocked) {
+      const q = await runQualityCheck(brief.summary, source);
+      brief = {
+        ...brief,
+        meta: { ...brief.meta, qualityScore: q.score ?? brief.meta.qualityScore },
+      };
+    }
+
+    // cache the canonical object
+    writeCache(cacheKey, brief, hasPremium ? PREMIUM_CACHE_TTL_MS : CACHE_TTL_MS);
 
     sendAnalyticsEvent({ event: "ai_brief_generated", payload: { model: resp.usedModel, fallback: resp.fallbackOccurred } });
 
-    if (opts?.publish === false) {
-      return { body, meta: normalized.meta, full: fullWithFooter };
-    }
-    return body;
+    return brief;
   } catch (err: any) {
     console.error("generateFullArticle error", err);
     if (isQuotaError(err) && !checkPremiumAccess()) {
-      const message = "## Service Temporarily Unavailable\n\nOur AI service is currently at capacity. **Premium subscribers have priority access** and alternative AI models to ensure uninterrupted service.\n\n[Upgrade to Premium](/pricing) to get priority access, unlimited briefs, and premium content.\n";
-      return message;
+      return makeErrorBrief("service_unavailable", { fallback: true, model: "quota" });
     }
-    return "## Service Temporarily Unavailable\n\nWe are currently unable to retrieve the full intelligence report for this article. Please try again later or visit the original source.";
+    return makeErrorBrief("service_unavailable", { fallback: true, model: "unknown" });
   }
 };
 

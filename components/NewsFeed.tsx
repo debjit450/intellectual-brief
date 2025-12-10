@@ -7,6 +7,7 @@ import logo from '/assets/logo.png';
 import SmartLoader from './SmartLoader';
 import AdUnit from './AdUnit';
 import { storeArticle } from '../utils/articleStorage';
+import { filterUnsafeArticles } from '../utils/safety';
 
 interface NewsFeedProps {
   activeCategory: Category;
@@ -29,10 +30,11 @@ const NewsFeed: React.FC<NewsFeedProps> = ({ activeCategory, searchQuery, onSele
 
     try {
       const response = await fetchNews(activeCategory, searchQuery, countryParam);
-      setArticles(response.articles);
+      const safeArticles = filterUnsafeArticles(response.articles);
+      setArticles(safeArticles);
 
       // Store all articles in localStorage cache so they're available when clicked
-      response.articles.forEach(article => {
+      safeArticles.forEach(article => {
         storeArticle(article);
       });
     } catch (e) {
@@ -45,8 +47,8 @@ const NewsFeed: React.FC<NewsFeedProps> = ({ activeCategory, searchQuery, onSele
     loadNews();
   }, [loadNews]);
 
-  const heroArticle = articles.length > 0 ? articles[0] : null;
-  const gridArticles = articles.length > 0 ? articles.slice(1) : [];
+  const heroArticle = articles[0] || null;
+  const gridArticles = heroArticle ? articles.slice(1) : articles;
 
   return (
     <div className="w-full max-w-7xl mx-auto px-4 md:px-8 py-10 md:py-16">

@@ -8,6 +8,7 @@ import AuthModal from '../components/AuthModal';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { Category, Article } from '../types';
+import { CATEGORIES } from '../constants.tsx';
 import logo from '/assets/logo.png';
 
 type EditionKey = "us_world" | "us" | "in" | "uk" | "global";
@@ -38,13 +39,18 @@ const EDITIONS: Record<
   },
 };
 
+const DEFAULT_CATEGORY: Category = 'Technology';
+const isValidCategory = (value: string | null): value is Category =>
+  !!value && CATEGORIES.includes(value as Category);
+
 const HomePage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
-  const categoryParam = searchParams.get('category') as Category | null;
+  const rawCategory = searchParams.get('category');
+  const categoryParam = isValidCategory(rawCategory) ? (rawCategory as Category) : null;
   const searchQueryParam = searchParams.get('q') || '';
   
   const [activeCategory, setActiveCategory] = useState<Category>(
-    categoryParam || 'Technology'
+    categoryParam || DEFAULT_CATEGORY
   );
   const [searchQuery, setSearchQuery] = useState(searchQueryParam);
   const [bookmarks, setBookmarks] = useState<string[]>([]);
@@ -72,7 +78,7 @@ const HomePage: React.FC = () => {
   // Update URL when category or search changes
   React.useEffect(() => {
     const params = new URLSearchParams();
-    if (activeCategory !== 'Technology') {
+    if (activeCategory !== DEFAULT_CATEGORY) {
       params.set('category', activeCategory);
     }
     if (searchQuery) {
@@ -87,7 +93,7 @@ const HomePage: React.FC = () => {
   const handleSearch = (query: string) => {
     setSearchQuery(query);
     const params = new URLSearchParams();
-    if (activeCategory !== 'Technology') {
+    if (activeCategory !== DEFAULT_CATEGORY) {
       params.set('category', activeCategory);
     }
     if (query) {
@@ -104,7 +110,7 @@ const HomePage: React.FC = () => {
     setSearchQuery('');
     setIsSidebarOpen(false);
     const params = new URLSearchParams();
-    if (category !== 'Technology') {
+    if (category !== DEFAULT_CATEGORY) {
       params.set('category', category);
     }
     const newUrl = params.toString() 
@@ -127,19 +133,19 @@ const HomePage: React.FC = () => {
   // Generate dynamic meta based on category and search
   const pageTitle = searchQuery 
     ? `Search: ${searchQuery} • The Intellectual Brief`
-    : activeCategory !== 'Technology'
+    : activeCategory !== DEFAULT_CATEGORY
     ? `${activeCategory} • The Intellectual Brief`
     : 'The Intellectual Brief – Clarity in a noisy world.';
   
   const pageDescription = searchQuery
     ? `Search results for "${searchQuery}" on The Intellectual Brief. Find curated tech, AI, markets, and policy news.`
-    : activeCategory !== 'Technology'
+    : activeCategory !== DEFAULT_CATEGORY
     ? `Latest ${activeCategory} news and analysis from The Intellectual Brief. Executive-ready briefings for decision-makers.`
     : 'Essential reading for the modern visionary. Curated tech, AI, markets, and policy news, plus AI-generated briefings.';
   
   const canonicalUrl = typeof window !== 'undefined'
     ? `${window.location.origin}${window.location.pathname}${window.location.search}`
-    : `https://theintellectualbrief.online/${searchQuery || activeCategory !== 'Technology' ? '?' : ''}${searchQuery ? `q=${encodeURIComponent(searchQuery)}` : ''}${activeCategory !== 'Technology' ? `category=${encodeURIComponent(activeCategory)}` : ''}`;
+    : `https://theintellectualbrief.online/${searchQuery || activeCategory !== DEFAULT_CATEGORY ? '?' : ''}${searchQuery ? `q=${encodeURIComponent(searchQuery)}` : ''}${activeCategory !== DEFAULT_CATEGORY ? `category=${encodeURIComponent(activeCategory)}` : ''}`;
 
   return (
     <div className="min-h-screen bg-paper dark:bg-paper-dark font-sans text-ink dark:text-ink-dark transition-colors duration-500">
