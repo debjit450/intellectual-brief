@@ -1,8 +1,9 @@
-// aiBriefs_v6_tib_premium.ts
+// aiBriefs_v6_tib_premium_public.ts
 // - Major product upgrade: deeper briefs, TIB editorial voice, multi-layer implications
 // - Strict safety/compliance preserved (two-mode logic retained)
 // - Robust parsing + heuristic recovery + telemetry + circuit breaker + caching
 // - Admin raw output retained for debugging (do NOT surface to users without review)
+// - Sanitization: platform-only fields removed for public responses by default
 // - WARNING: run integration tests with your model outputs and tune token budgets to your environment
 
 import { GoogleGenAI } from "@google/genai";
@@ -286,8 +287,6 @@ FULL BRIEF FORMAT (TIB STYLE):
   3) Why It Matters (drivers, causation, stakeholders).
   4) Implications (structured): list first-order impacts, second-order impacts, and who is affected (actors). Provide short actionable signals.
   5) Outlook (2-3 short bullets: likely near-term trends).
-  6) Ad Safety Assessment (one-line reason: low/medium/high/prohibited).
-  7) Image Safety (true/false) and any notes.
 - Always include a short "degree of certainty" tag for background claims: (Confirmed | Probable | Unknown).
 - Do not reproduce sentences from the source; rephrase and synthesize.
 `.trim();
@@ -715,18 +714,74 @@ const stripFooterForPublish = (contentWithFooter: string) => {
   return contentWithFooter.replace(/<!--\s*metadata:\s*({[\s\S]*?})\s*-->\s*$/m, "").trim();
 };
 
+// -------------------- Sanitization Helper --------------------
+
+/**
+ * sanitizeBriefForUser
+ * - Remove admin/debug-only fields before returning to user-facing UI.
+ * - Keeps essential fields: safe_title, summary (footer stripped), image_safe, risk_rating_adsense,
+ *   risk_reason, sensitive_categories, implications, blocked, meta (reduced).
+ *
+ * If opts.admin === true, returns the full brief unchanged except the summary has footer stripped.
+ */
+const sanitizeBriefForUser = (brief: Brief, opts?: { admin?: boolean }): Brief => {
+  if (opts?.admin) {
+    // Admin explicitly requested raw/admin view — return full object but remove metadata footer from summary
+    const clonedAdmin: Brief = JSON.parse(JSON.stringify(brief));
+    if (clonedAdmin.summary) clonedAdmin.summary = stripFooterForPublish(clonedAdmin.summary);
+    return clonedAdmin;
+  }
+
+  const safeMeta = {
+    // hide exact model identifiers from end users for operational secrecy
+    model: brief.meta?.model ? "redacted" : "unknown",
+    fallback: !!brief.meta?.fallback,
+    generatedAt: brief.meta?.generatedAt ?? new Date().toISOString(),
+    qualityScore: typeof brief.meta?.qualityScore === "number" ? brief.meta.qualityScore : null,
+    wordcount: typeof brief.meta?.wordcount === "number" ? brief.meta?.wordcount : null,
+  };
+
+  const sanitized: Brief = {
+    safe_title: brief.safe_title,
+    // Remove any appended metadata/footer and trim; always use stripped body for users
+    summary: stripFooterForPublish(brief.summary || ""),
+    image_safe: !!brief.image_safe,
+    risk_rating_adsense: brief.risk_rating_adsense,
+    risk_reason: brief.risk_reason,
+    sensitive_categories: Array.isArray(brief.sensitive_categories) ? [...brief.sensitive_categories] : [],
+    // Do not expose internal parsing flags to public
+    source_flags: [],
+    blocked: !!brief.blocked,
+    implications: Array.isArray(brief.implications)
+      ? brief.implications.map((imp) => ({
+          type: imp.type,
+          description: imp.description,
+          affected: Array.isArray(imp.affected) ? [...imp.affected] : [],
+          confidence: imp.confidence,
+          score: imp.score,
+        }))
+      : [],
+    meta: safeMeta,
+    // raw omitted intentionally
+  };
+
+  return sanitized;
+};
+
 // -------------------- Public API --------------------
 
 /**
  * analyzeArticle: returns either markdown or structured JSON depending on outputMode
  * This function is a quick-analyze pathway (smaller token budget than generateFullArticle)
+ * opts.admin === true -> returns admin view (raw fields included)
  */
 export const analyzeArticle = async (
   articleTitle: string,
   articleSource: string,
-  opts?: { outputMode?: "markdown" | "json" }
+  opts?: { outputMode?: "markdown" | "json"; admin?: boolean }
 ) => {
   const outputMode: "markdown" | "json" = opts?.outputMode ?? "json";
+  const adminRequested = !!opts?.admin;
   const hasPremium = checkPremiumAccess();
   const preferred = hasPremium ? MODELS.BEST_FT : MODELS.LITE;
   const fallbacks = [MODELS.STABLE_FLASH, MODELS.HIGH_THROUGHPUT];
@@ -752,7 +807,8 @@ export const analyzeArticle = async (
     if (jsonText) {
       try {
         const parsed = JSON.parse(jsonText);
-        return coerceBrief(parsed, text, { model: resp.usedModel, fallback: resp.fallbackOccurred });
+        const brief = coerceBrief(parsed, text, { model: resp.usedModel, fallback: resp.fallbackOccurred });
+        return sanitizeBriefForUser(brief, { admin: adminRequested });
       } catch (e) {
         // fallback to heuristics below
       }
@@ -760,13 +816,16 @@ export const analyzeArticle = async (
 
     const heur = tryParseKeyValueFromText(text);
     if (heur && (heur.summary || heur.safe_title)) {
-      return coerceBrief(heur, text, { model: resp.usedModel, fallback: resp.fallbackOccurred });
+      const brief = coerceBrief(heur, text, { model: resp.usedModel, fallback: resp.fallbackOccurred });
+      return sanitizeBriefForUser(brief, { admin: adminRequested });
     }
 
-    return makeErrorBrief("no_json_returned", { model: resp.usedModel, fallback: resp.fallbackOccurred });
+    const errBrief = makeErrorBrief("no_json_returned", { model: resp.usedModel, fallback: resp.fallbackOccurred });
+    return sanitizeBriefForUser(errBrief, { admin: adminRequested });
   } catch (err: any) {
     console.error("analyzeArticle error", err);
-    return makeErrorBrief("model_failure", { model: "unknown", fallback: true });
+    const errBrief = makeErrorBrief("model_failure", { model: "unknown", fallback: true });
+    return sanitizeBriefForUser(errBrief, { admin: adminRequested });
   }
 };
 
@@ -775,14 +834,16 @@ export const analyzeArticle = async (
  * - Produces TIB-style Full Briefs (450-700 words) by default in Full Brief Mode.
  * - outputMode=json returns strict JSON per schema.
  * - Caching, premium quality checks, and safety logic are included.
+ * - opts.admin === true -> returns admin view (raw fields included)
  */
 export const generateFullArticle = async (
   title: string,
   summary: string,
   source: string,
-  opts?: { forceRefresh?: boolean; publish?: boolean; outputMode?: "markdown" | "json"; targetWordCount?: number }
+  opts?: { forceRefresh?: boolean; publish?: boolean; outputMode?: "markdown" | "json"; targetWordCount?: number; admin?: boolean }
 ): Promise<Brief> => {
   const cacheKey = await getBriefCacheKey(title, source);
+  const adminRequested = !!opts?.admin;
   const hasPremium = checkPremiumAccess();
 
   if (!opts?.forceRefresh) {
@@ -792,7 +853,8 @@ export const generateFullArticle = async (
       const payload = typeof cached.payload === "string" ? (() => {
         try { return JSON.parse(cached.payload); } catch { return null; }
       })() : cached.payload;
-      return coerceBrief(payload, undefined, { model: payload?.meta?.model || "cache", fallback: !!payload?.meta?.fallback });
+      const cachedBrief = coerceBrief(payload, undefined, { model: payload?.meta?.model || "cache", fallback: !!payload?.meta?.fallback });
+      return sanitizeBriefForUser(cachedBrief, { admin: adminRequested });
     }
   }
 
@@ -898,13 +960,15 @@ export const generateFullArticle = async (
 
     sendAnalyticsEvent({ event: "ai_brief_generated", payload: { model: resp.usedModel, fallback: resp.fallbackOccurred } });
 
-    return brief;
+    return sanitizeBriefForUser(brief, { admin: adminRequested });
   } catch (err: any) {
     console.error("generateFullArticle error", err);
     if (isQuotaError(err) && !checkPremiumAccess()) {
-      return makeErrorBrief("quota_exhausted", { fallback: true, model: "quota" });
+      const errBrief = makeErrorBrief("quota_exhausted", { fallback: true, model: "quota" });
+      return sanitizeBriefForUser(errBrief, { admin: adminRequested });
     }
-    return makeErrorBrief("service_unavailable", { fallback: true, model: "unknown" });
+    const errBrief = makeErrorBrief("service_unavailable", { fallback: true, model: "unknown" });
+    return sanitizeBriefForUser(errBrief, { admin: adminRequested });
   }
 };
 
@@ -913,8 +977,10 @@ export const generateFullArticle = async (
  * produceMorningBrief: aggregate a list of article briefs (titles + sources).
  * This is a simple aggregator that requests brief summaries for each and combines them into a short "morning brief".
  * NOTE: This is a scaffold — integrate with your article store and scheduling system.
+ * opts.admin === true -> returns admin items (raw included)
  */
-export const produceMorningBrief = async (items: { title: string; source: string; summary?: string }[], opts?: { targetCount?: number }) => {
+export const produceMorningBrief = async (items: { title: string; source: string; summary?: string }[], opts?: { targetCount?: number; admin?: boolean }) => {
+  const adminRequested = !!opts?.admin;
   // pick top N
   const target = opts?.targetCount ?? 6;
   const subset = items.slice(0, target);
@@ -922,7 +988,7 @@ export const produceMorningBrief = async (items: { title: string; source: string
   // get briefs in parallel with concurrency limits (using semaphore)
   const promises = subset.map(async (it) => {
     try {
-      return await generateFullArticle(it.title, it.summary ?? "", it.source, { forceRefresh: false, outputMode: "json", targetWordCount: 220 });
+      return await generateFullArticle(it.title, it.summary ?? "", it.source, { forceRefresh: false, outputMode: "json", targetWordCount: 220, admin: adminRequested });
     } catch (e) {
       return makeErrorBrief("item_fetch_failed", { model: "unknown" }) as Brief;
     }
@@ -930,25 +996,28 @@ export const produceMorningBrief = async (items: { title: string; source: string
 
   const results = await Promise.all(promises);
 
-  // assemble morning brief markdown
+  // assemble morning brief markdown using sanitized results for public
   const header = `# The Intellectual Brief — Morning Brief\n\nTop ${results.length} stories.\n\n`;
   const body = results.map((b, idx) => {
-    if (b.blocked) {
-      return `${idx + 1}. **${b.safe_title}** — [blocked due to safety].`;
+    const safe = sanitizeBriefForUser(b, { admin: adminRequested });
+    if (safe.blocked) {
+      return `${idx + 1}. **${safe.safe_title}** — [blocked due to safety].`;
     }
-    const snippet = b.summary.split("\n").slice(0, 2).join(" ");
-    return `${idx + 1}. **${b.safe_title}** — ${snippet}`;
+    const snippet = safe.summary.split("\n").slice(0, 2).join(" ");
+    return `${idx + 1}. **${safe.safe_title}** — ${snippet}`;
   }).join("\n\n");
 
   return {
     markdown: `${header}${body}`,
-    items: results,
+    items: results.map((r) => sanitizeBriefForUser(r, { admin: adminRequested })),
   };
 };
 
 // -------------------- UI helper --------------------
 export const generateArticleJsonForUi = async (title: string, summary: string, source: string) => {
-  return await generateFullArticle(title, summary, source, { forceRefresh: false, publish: true, outputMode: "json", targetWordCount: 550 });
+  // default public view (admin=false) — returns sanitized JSON brief for UI
+  const brief = await generateFullArticle(title, summary, source, { forceRefresh: false, publish: true, outputMode: "json", targetWordCount: 550, admin: false });
+  return brief;
 };
 
 // -------------------- End of file --------------------
