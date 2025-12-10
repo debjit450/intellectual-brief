@@ -763,8 +763,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
                     },
                   }}
                 >
-                  {fullContent ||
-                    "## Service Temporarily Unavailable\n\nThe dispatch for this topic cannot be retrieved at this moment. Please verify the connection or consult the original source directly."}
+                  {fullContent}
                 </ReactMarkdown>
               )}
             </div>
