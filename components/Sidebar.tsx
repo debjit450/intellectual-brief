@@ -35,7 +35,7 @@ const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   return (
     <div
-      className={`w-64 flex-shrink-0 flex flex-col h-[calc(100vh-5rem)] sticky top-20 pl-8 border-r border-neutral-200 dark:border-neutral-800 ${className}`}
+      className={`w-64 flex-shrink-0 flex flex-col h-[calc(100vh-5rem)] sticky top-20 pl-8 border-r border-neutral-200 dark:border-neutral-800 overflow-y-auto overscroll-contain scrollbar-thin scrollbar-thumb-neutral-300 dark:scrollbar-thumb-neutral-700 scrollbar-track-transparent ${className}`}
     >
       {/* Edition / Country Filter */}
       <div className="mb-10">

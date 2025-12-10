@@ -4,13 +4,11 @@ import { Link } from 'react-router-dom';
 import { Article } from '../types';
 import { generateFullArticle } from '../services/geminiService';
 import { Icons, TBLogo, AD_CONFIG } from '../constants.tsx';
-import { useSubscription } from '../context/SubscriptionContext';
 import ReactMarkdown from 'react-markdown';
 import logo from '/assets/logo.png';
 import { generateSlug } from '../utils/slug';
 import { storeArticle } from '../utils/articleStorage';
 import AdUnit from './AdUnit';
-import { Crown, ArrowRight } from 'lucide-react';
 import { containsSensitiveKeywords } from '../utils/safety';
 
 interface ArticleDetailProps {
@@ -88,7 +86,6 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
   const [imageError, setImageError] = useState(false);
   const [briefData, setBriefData] = useState<BriefPayload | null>(null);
   const [blocked, setBlocked] = useState(false);
-  const { isPremium } = useSubscription();
 
   // --- NEW: share feedback state ---
   const [shareFeedback, setShareFeedback] = useState<string | null>(null);
@@ -100,12 +97,6 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
     () => containsSensitiveKeywords(articleTextBlob),
     [articleTextBlob]
   );
-
-  // Check if content is premium-only or service unavailable
-  const isPremiumContent = fullContent?.includes('ONLY AVAILABLE IN PAID PLANS') || false;
-  const isServiceUnavailable = fullContent?.includes('Service Temporarily Unavailable') ||
-    fullContent?.includes('Service Unavailable') || false;
-  const showUpgradePrompt = (isPremiumContent || isServiceUnavailable) && !isPremium;
 
   const articleSlug = generateSlug(article.title, article.id);
   // Always use canonical domain (non-www) for SEO consistency
@@ -206,7 +197,14 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
       } catch (err) {
         console.error("Failed to load full article:", err);
         if (isMounted) {
-          const fallback = coerceClientBrief(null);
+          const fallback = coerceClientBrief({
+            summary: "",
+            safe_title: "Summary unavailable",
+            risk_rating_adsense: "prohibited",
+            risk_reason: "service_unavailable",
+            source_flags: ["client_error"],
+            blocked: true,
+          });
           setBriefData(fallback);
           setBlocked(true);
           setFullContent("");
@@ -286,6 +284,32 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
     );
     return blocked || risk === "high" || risk === "prohibited" || hasSensitive;
   }, [briefData, blocked]);
+
+  const riskReason = useMemo(() => (briefData?.risk_reason || "").toLowerCase(), [briefData]);
+  const sourceFlags = useMemo(
+    () => (briefData?.source_flags || []).map((f: any) => (typeof f === "string" ? f.toLowerCase() : "")),
+    [briefData]
+  );
+  const aiQuotaExhausted = useMemo(
+    () => riskReason === "quota_exhausted" || sourceFlags.includes("quota_exhausted") || briefData?.meta?.model === "quota",
+    [riskReason, sourceFlags, briefData]
+  );
+  const aiTemporarilyUnavailable = useMemo(
+    () => riskReason === "service_unavailable" || sourceFlags.includes("service_unavailable"),
+    [riskReason, sourceFlags]
+  );
+  const displayReason = useMemo(() => {
+    if (aiQuotaExhausted) {
+      return "Our AI quota is currently exhausted. We prioritize Premium members and will retry when capacity frees up.";
+    }
+    if (aiTemporarilyUnavailable) {
+      return "We’re currently at capacity. Upgrade your plan for priority access to AI Briefs.";
+    }
+    if (blocked) {
+      return "This brief is blocked due to sensitive content or policy risk. Please read the original source directly.";
+    }
+    return null;
+  }, [aiQuotaExhausted, aiTemporarilyUnavailable, blocked]);
 
   const articleLd = React.useMemo(() => ({
     "@context": "https://schema.org",
@@ -635,10 +659,28 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
                 <div className="rounded-none border border-amber-200 dark:border-amber-800 bg-amber-50/80 dark:bg-amber-900/20 p-4 mb-6">
                   {blocked ? (
                     <div className="text-neutral-700 dark:text-neutral-200 space-y-3">
-                      <div className="font-semibold uppercase text-[11px] tracking-[0.24em] text-primary">Summary unavailable</div>
+                      <div className="font-semibold uppercase text-[11px] tracking-[0.24em] text-primary">
+                        {aiQuotaExhausted
+                          ? "AI quota reached"
+                          : aiTemporarilyUnavailable
+                            ? "AI service unavailable"
+                            : "Summary unavailable"}
+                      </div>
                       <p className="font-serif leading-relaxed">
-                        This brief is blocked due to sensitive content or policy risk. Please read the original article directly.
+                        {displayReason ||
+                          "This brief is blocked due to sensitive content or policy risk. Please read the original article directly."}
                       </p>
+                      {(aiQuotaExhausted || aiTemporarilyUnavailable) && (
+                        <div className="flex flex-col sm:flex-row gap-3 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => window?.location?.reload?.()}
+                            className="inline-flex items-center justify-center px-4 py-2 text-[10px] uppercase tracking-[0.18em] border border-neutral-300 dark:border-neutral-700 text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+                          >
+                            Retry now
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <p className="font-serif text-lg md:text-xl leading-[1.8] text-neutral-800 dark:text-neutral-100">
@@ -755,58 +797,6 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
               </div>
             ) : (
               <>
-                {/* Upgrade Prompt for Premium Content or Service Unavailable */}
-                {showUpgradePrompt && (
-                  <div className="my-12 p-8 bg-gradient-to-r from-primary/10 to-primary/5 dark:from-primary/20 dark:to-primary/10 border-2 border-primary/30 rounded-none">
-                    <div className="flex items-start gap-4 mb-6">
-                      <Crown className="w-6 h-6 text-primary flex-shrink-0 mt-1" />
-                      <div className="flex-1">
-                        <h3 className="text-2xl font-serif font-medium text-ink dark:text-ink-dark mb-3">
-                          {isPremiumContent ? 'Premium Content' : 'Service Temporarily Unavailable'}
-                        </h3>
-                        <p className="text-neutral-700 dark:text-neutral-300 font-serif leading-relaxed mb-6">
-                          {isPremiumContent
-                            ? 'This article contains premium content that requires a Premium or Enterprise subscription to access.'
-                            : 'Our AI service is currently at capacity. Premium subscribers have priority access and alternative AI models.'}
-                        </p>
-                        <div className="space-y-3 mb-6">
-                          <p className="text-sm font-serif font-medium text-ink dark:text-ink-dark">
-                            Upgrade to Premium to get:
-                          </p>
-                          <ul className="space-y-2 text-sm font-serif text-neutral-700 dark:text-neutral-300">
-                            <li className="flex items-center gap-2">
-                              <span className="text-primary">✓</span>
-                              {isPremiumContent ? 'Access to premium article content' : 'Priority access when service is exhausted'}
-                            </li>
-                            <li className="flex items-center gap-2">
-                              <span className="text-primary">✓</span>
-                              Unlimited AI-generated briefs
-                            </li>
-                            <li className="flex items-center gap-2">
-                              <span className="text-primary">✓</span>
-                              Ad-free experience
-                            </li>
-                            <li className="flex items-center gap-2">
-                              <span className="text-primary">✓</span>
-                              Early access to new features
-                            </li>
-                          </ul>
-                        </div>
-                        <Link
-                          to="/pricing"
-                          className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-white font-bold text-[10px] uppercase tracking-[0.2em] hover:bg-primary/90 transition-colors"
-                        >
-                          Upgrade to Premium
-                          <ArrowRight className="w-4 h-4" />
-                        </Link>
-                        <p className="text-xs text-neutral-500 dark:text-neutral-500 font-serif italic mt-4">
-                          Payment gateway integration coming soon. Contact us for early access.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
                 {/* Middle In-Content Ad - Only show if content is substantial and safe */}
                 {!isSensitiveMode && fullContent && fullContent.length > 1500 && (
                   <AdUnit

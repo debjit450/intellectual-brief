@@ -1,11 +1,10 @@
-// aiBriefs.ts — Advanced version
-// Features added:
-// - Dynamic/conditional "Implications" categories detected automatically
-// - Optional machine-readable JSON output mode (for UI/structured consumption)
-// - Improved prompt engineering with schema enforcement and reasoning step
-// - Better model orchestration and clearer fallback semantics
-// - More robust normalization, caching, and premium behavior
-// - Telemetry hooks and optional local diagnostics
+// aiBriefs_v5_patched.ts — Patched & hardened version
+// - Node/browser crypto fallback for computeHashHex
+// - Safe localStorage guards
+// - Robust JSON extraction from model output (extractFirstJsonObject)
+// - analyzeArticle respects opts.outputMode
+// - Defensive model response parsing, telemetry with requestId
+// - Keeps all safety & compliance rules intact
 
 import { GoogleGenAI } from "@google/genai";
 
@@ -35,21 +34,40 @@ const sendAnalyticsEvent = (ev: { event: string; payload?: any }) => {
   console.debug("[AI_ANALYTICS]", ev.event, ev.payload ?? "");
 };
 
+const makeRequestId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
 // -------------------- Utilities --------------------
 async function computeHashHex(input: string): Promise<string> {
-  if (typeof crypto !== "undefined" && (crypto as any).subtle) {
-    const enc = new TextEncoder();
-    const data = enc.encode(input);
-    const digest = await (crypto as any).subtle.digest("SHA-256", data);
-    return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
+  // Browser SubtleCrypto
+  if (typeof globalThis !== "undefined" && (globalThis as any).crypto && (globalThis as any).crypto.subtle) {
+    try {
+      const enc = new TextEncoder();
+      const data = enc.encode(input);
+      const digest = await (globalThis as any).crypto.subtle.digest("SHA-256", data);
+      return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
+    } catch (e) {
+      console.debug("crypto.subtle failed, falling back", e);
+    }
   }
-  // FNV-1a fallback (fast, not cryptographically strong but fine for cache keys)
+
+  // Node crypto (CommonJS or ESM)
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const nodeCrypto = typeof require === "function" ? require("crypto") : null;
+    if (nodeCrypto && typeof nodeCrypto.createHash === "function") {
+      return nodeCrypto.createHash("sha256").update(input, "utf8").digest("hex");
+    }
+  } catch (e) {
+    console.debug("node crypto fallback failed", e);
+  }
+
+  // FNV-1a fallback (deterministic, fast)
   let h = 2166136261 >>> 0;
   for (let i = 0; i < input.length; i++) {
     h ^= input.charCodeAt(i);
-    h = Math.imul(h, 16777619);
+    h = Math.imul(h, 16777619) >>> 0;
   }
-  return (h >>> 0).toString(16);
+  return (h >>> 0).toString(16).padStart(8, "0");
 }
 
 const getBriefCacheKey = async (title: string, source: string) => {
@@ -101,7 +119,7 @@ const backoff = async (attempt: number) => {
 };
 
 const isQuotaError = (err: any) => {
-  const m = (err?.message || "").toString().toLowerCase();
+  const m = (err?.message || "")?.toString().toLowerCase();
   return (
     err?.status === 429 ||
     err?.code === 429 ||
@@ -122,10 +140,11 @@ const withTimeout = async <T>(promiseFactory: (signal: AbortSignal) => Promise<T
   }
 };
 
-// localStorage wrappers (browser)
+// localStorage wrappers (browser-safe)
+const hasLocalStorage = () => typeof window !== "undefined" && typeof window.localStorage !== "undefined";
 const readCache = (key: string) => {
   try {
-    if (typeof window === "undefined") return null;
+    if (!hasLocalStorage()) return null;
     const raw = window.localStorage.getItem(key);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
@@ -141,7 +160,7 @@ const readCache = (key: string) => {
 };
 const writeCache = (key: string, value: any, ttlMs = CACHE_TTL_MS) => {
   try {
-    if (typeof window === "undefined") return;
+    if (!hasLocalStorage()) return;
     const payload = {
       meta: { cachedAt: Date.now(), expiresAt: Date.now() + ttlMs, version: 1 },
       payload: value,
@@ -152,9 +171,9 @@ const writeCache = (key: string, value: any, ttlMs = CACHE_TTL_MS) => {
   }
 };
 
-// premium check
+// premium check (client-side localStorage flag)
 const checkPremiumAccess = (): boolean => {
-  if (typeof window === "undefined") return false;
+  if (!hasLocalStorage()) return false;
   const plan = window.localStorage.getItem("user_subscription_plan");
   return plan === "premium" || plan === "enterprise";
 };
@@ -162,21 +181,14 @@ const checkPremiumAccess = (): boolean => {
 // premium detection
 const isPremiumContent = (title: string, source: string): boolean => {
   const premiumKeywords = ["exclusive", "premium", "in-depth", "analysis", "investor"];
-  const titleLower = title.toLowerCase();
+  const titleLower = (title || "").toLowerCase();
   return premiumKeywords.some((k) => titleLower.includes(k));
 };
 
 // -------------------- Implication Category Detection --------------------
 // Heuristic detector that decides which implication categories are relevant.
-// This is intentionally rule-based (deterministic) so you can control behavior without additional model calls.
 
-type ImplicationCategory =
-  | "consumers"
-  | "small_businesses"
-  | "policymakers"
-  | "industry"
-  | "investors"
-  | "none";
+type ImplicationCategory = "consumers" | "small_businesses" | "policymakers" | "industry" | "investors" | "none";
 
 const CATEGORY_KEYWORDS: Record<ImplicationCategory, string[]> = {
   consumers: ["consumer", "user", "household", "buyer", "customers", "privacy", "safety"],
@@ -202,10 +214,8 @@ const detectImplicationCategories = (title: string, summary: string, sourceText:
     for (const kw of CATEGORY_KEYWORDS[cat]) {
       if (text.includes(kw)) scores[cat] += 1;
     }
-    // also boost on presence of domain-specific signals
   }
 
-  // convert to array of categories that have score > 0
   const selected = Object.entries(scores)
     .filter(([k, v]) => v > 0)
     .sort((a, b) => b[1] - a[1])
@@ -244,7 +254,14 @@ SAFETY AND COMPLIANCE RULES (MANDATORY)
 `.trim();
 
 // Build prompt that includes only relevant implication categories.
-const buildPrompt = (title: string, summary: string, source: string, categories: ImplicationCategory[], extra?: string, outputMode: "markdown" | "json" = "markdown") => {
+const buildPrompt = (
+  title: string,
+  summary: string,
+  source: string,
+  categories: ImplicationCategory[],
+  extra?: string,
+  outputMode: "markdown" | "json" = "markdown"
+) => {
   const categoriesList = categories.includes("none") ? "none" : categories.join(", ");
 
   const jsonSchemaNote =
@@ -252,35 +269,7 @@ const buildPrompt = (title: string, summary: string, source: string, categories:
       ? `\n- REQUIRED JSON SCHEMA (strict): {\n  safe_title: string,\n  summary: string, // 3-5 sentences, neutral, factual, own words\n  risk_rating_adsense: "low" | "medium" | "high" | "prohibited",\n  risk_reason: string,\n  image_safe: boolean,\n  sensitive_categories: string[], // any of: minors, suicide, sexual_exploitation, crime, violence, hate, other\n  source_flags: string[], // list unconfirmed or sensitive signals\n  blocked: boolean,\n  meta: { model: string, fallback: boolean, generatedAt: string, qualityScore: number|null, wordcount: number|null },\n  raw?: string\n}\n- Return only valid JSON. No extra text.`
       : "";
 
-  return `
-${SYSTEM_INSTRUCTIONS}
-${SAFETY_BRIEF_RULES}
-
-USER INSTRUCTIONS:
-- Task: Produce a safety-compliant brief with the required fields.
-- Headline: ${JSON.stringify(title)}
-- Source context: ${JSON.stringify(source)}
-- Existing summary or notes: ${JSON.stringify(summary)}
-- Relevant implication categories (for awareness, not for output unless applicable): ${categoriesList}
-- Extra: ${extra ?? ""}
-
-OUTPUT REQUIREMENTS:
-- safe_title: short, neutral, non-sensational.
-- summary: 
-  * If Sensitive Mode: exactly 3-5 sentences, concise, factual, no analysis, no outlook. 
-  * If Full Brief Mode: 200-400 words in Markdown with these sections in order: "1. Executive Summary" (3-4 sentences), "2. Key Developments / What Happened", "3. Analysis", "4. Implications" (omit if none), "5. Outlook", "6. Ad Safety Assessment", "7. Image Safety".
-- risk_rating_adsense: Low/Medium/High/Prohibited with a one-line reason based only on confirmed facts. If Sensitive Mode, set to High or Prohibited.
-- image_safe: true if no indication of minors, crime victims, or sensitive imagery; false if any doubt or sensitive cues appear (default to false in Sensitive Mode).
-- sensitive_categories: list any that apply from [minors, suicide, sexual_exploitation, crime, violence, hate, mass_casualty, graphic_harm]; use [] if none are present.
-- source_flags: include "unconfirmed" for any uncertain claims; include relevant sensitive signals.
-- blocked: boolean flag if summary should not be shown to end users (true if sensitive + ads unsafe).
-- Avoid emotional language, speculation, or invented details. Do not copy structure or phrases from the source. Analysis is only allowed in Full Brief Mode.
-
-${jsonSchemaNote}
-
-RESPONSE FORMAT:
-- Return strict JSON per schema. Do not include Markdown, headers, or any extra text.
-`.trim();
+  return `\n${SYSTEM_INSTRUCTIONS}\n${SAFETY_BRIEF_RULES}\n\nUSER INSTRUCTIONS:\n- Task: Produce a safety-compliant brief with the required fields.\n- Headline: ${JSON.stringify(title)}\n- Source context: ${JSON.stringify(source)}\n- Existing summary or notes: ${JSON.stringify(summary)}\n- Relevant implication categories (for awareness, not for output unless applicable): ${categoriesList}\n- Extra: ${extra ?? ""}\n\nOUTPUT REQUIREMENTS:\n- safe_title: short, neutral, non-sensational.\n- summary: \n  * If Sensitive Mode: exactly 3-5 sentences, concise, factual, no analysis, no outlook. \n  * If Full Brief Mode: 200-400 words in Markdown with these sections in order: \"1. Executive Summary\" (3-4 sentences), \"2. Key Developments / What Happened\", \"3. Analysis\", \"4. Implications\" (omit if none), \"5. Outlook\", \"6. Ad Safety Assessment\", \"7. Image Safety\".\n- risk_rating_adsense: Low/Medium/High/Prohibited with a one-line reason based only on confirmed facts. If Sensitive Mode, set to High or Prohibited.\n- image_safe: true if no indication of minors, crime victims, or sensitive imagery; false if any doubt or sensitive cues appear (default to false in Sensitive Mode).\n- sensitive_categories: list any that apply from [minors, suicide, sexual_exploitation, crime, violence, hate, mass_casualty, graphic_harm]; use [] if none are present.\n- source_flags: include \"unconfirmed\" for any uncertain claims; include relevant sensitive signals.\n- blocked: boolean flag if summary should not be shown to end users (true if sensitive + ads unsafe).\n- Avoid emotional language, speculation, or invented details. Do not copy structure or phrases from the source. Analysis is only allowed in Full Brief Mode.\n\n${jsonSchemaNote}\n\nRESPONSE FORMAT:\n- Return strict JSON per schema. Do not include Markdown, headers, or any extra text.\n`;
 };
 
 // -------------------- Model Call Orchestration --------------------
@@ -301,6 +290,7 @@ const makeModelCall = async ({
   }
 
   const release = await globalSemaphore.acquire();
+  const reqId = makeRequestId();
   try {
     let attempt = 0;
     const chain = [preferredModel, ...fallbacks];
@@ -309,32 +299,43 @@ const makeModelCall = async ({
       for (let tryIdx = 0; tryIdx < 2; tryIdx++) {
         attempt++;
         try {
-          sendAnalyticsEvent({ event: "model_request_start", payload: { model, attempt } });
+          sendAnalyticsEvent({ event: "model_request_start", payload: { model, attempt, reqId } });
 
-          const resp = await withTimeout(
-            async (signal) => {
-              return await ai.models.generateContent({
-                model,
-                contents: prompt,
-                temperature: options.temperature ?? 0.0,
-                maxOutputTokens: options.maxOutputTokens ?? 900,
-                topP: options.topP ?? 1.0,
-                ...(signal ? { signal } : {}),
-              } as any);
-            },
-            REQUEST_TIMEOUT_MS
-          );
+          const resp = await withTimeout(async (signal) => {
+            // defensive wrapper for different SDK shapes
+            const argsAny: any = {
+              model,
+              contents: prompt,
+              temperature: options.temperature ?? 0.0,
+              maxOutputTokens: options.maxOutputTokens ?? 900,
+              topP: options.topP ?? 1.0,
+            };
+            if (signal) argsAny.signal = signal;
+            // Prefer structured API if available
+            if (typeof (ai as any).models?.generateContent === "function") {
+              return await (ai as any).models.generateContent(argsAny);
+            }
+            // Fallback: try a generic call
+            if (typeof (ai as any).generate === "function") {
+              return await (ai as any).generate({ model, prompt });
+            }
+            throw new Error("unsupported_ai_sdk_shape");
+          }, REQUEST_TIMEOUT_MS);
 
           const anyResp: any = resp as any;
-          const text = anyResp?.text ?? anyResp?.output ?? (typeof resp === "string" ? resp : null);
+          const text = anyResp?.text ?? anyResp?.output ?? anyResp?.outputs?.[0]?.text ?? (typeof resp === "string" ? resp : null);
+          if (!text || typeof text !== "string") {
+            sendAnalyticsEvent({ event: "model_response_unexpected", payload: { model, reqId, respPreview: String(resp).slice(0, 500) } });
+            throw new Error("unexpected_model_response");
+          }
 
-          sendAnalyticsEvent({ event: "model_request_success", payload: { model, attempt } });
+          sendAnalyticsEvent({ event: "model_request_success", payload: { model, attempt, reqId } });
 
           consecutiveFailures = 0;
-          return { text, usedModel: model, fallbackOccurred: model !== preferredModel, meta: { model, attempt } };
+          return { text, usedModel: model, fallbackOccurred: model !== preferredModel, meta: { model, attempt, reqId } };
         } catch (err: any) {
           lastErr = err;
-          sendAnalyticsEvent({ event: "model_request_error", payload: { model, attempt, error: String(err?.message || err) } });
+          sendAnalyticsEvent({ event: "model_request_error", payload: { model, attempt, reqId, error: String(err?.message || err) } });
           if (isQuotaError(err)) break; // move to fallback immediately
           await backoff(tryIdx + 1);
         }
@@ -353,15 +354,36 @@ const makeModelCall = async ({
   }
 };
 
+// -------------------- JSON extraction helper --------------------
+const extractFirstJsonObject = (text: string): { jsonText: string | null; start: number; end: number } => {
+  if (!text) return { jsonText: null, start: -1, end: -1 };
+  const firstOpen = text.indexOf("{");
+  if (firstOpen === -1) return { jsonText: null, start: -1, end: -1 };
+
+  let depth = 0;
+  for (let i = firstOpen; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === "{") depth++;
+    else if (ch === "}") {
+      depth--;
+      if (depth === 0) {
+        const candidate = text.slice(firstOpen, i + 1);
+        try {
+          JSON.parse(candidate);
+          return { jsonText: candidate, start: firstOpen, end: i + 1 };
+        } catch (e) {
+          // continue scanning (may be braces inside strings)
+        }
+      }
+    }
+  }
+  return { jsonText: null, start: -1, end: -1 };
+};
+
 // -------------------- Quality Check --------------------
 const runQualityCheck = async (generated: string, source: string) => {
   try {
-    const prompt = `
-You are a factuality and clarity judge. Return JSON: {"score": <0-100>, "notes": "<short notes>"}
-Article: ${JSON.stringify(generated)}
-Source: ${JSON.stringify(source)}
-Rules: Base factuality only on overlap with the provided source text.
-`.trim();
+    const prompt = `\nYou are a factuality and clarity judge. Return JSON: {"score": <0-100>, "notes": "<short notes>"}\nArticle: ${JSON.stringify(generated)}\nSource: ${JSON.stringify(source)}\nRules: Base factuality only on overlap with the provided source text.`.trim();
 
     const resp = await makeModelCall({
       preferredModel: MODELS.HIGH_THROUGHPUT,
@@ -371,10 +393,10 @@ Rules: Base factuality only on overlap with the provided source text.
     });
 
     const text = resp.text ?? "";
-    const jMatch = text.match(/\{[\s\S]*\}/);
-    if (jMatch) {
+    const { jsonText } = extractFirstJsonObject(text);
+    if (jsonText) {
       try {
-        const parsed = JSON.parse(jMatch[0]);
+        const parsed = JSON.parse(jsonText);
         const score = Math.max(0, Math.min(100, Number(parsed.score || 0)));
         return { score, notes: parsed.notes ?? "" };
       } catch (e) {
@@ -425,7 +447,7 @@ const makeErrorBrief = (reason: string, meta?: Partial<Brief["meta"]>): Brief =>
   risk_rating_adsense: "prohibited",
   risk_reason: reason,
   sensitive_categories: [],
-  source_flags: ["parse_error"],
+  source_flags: [reason || "parse_error"],
   blocked: true,
   meta: {
     model: meta?.model ?? "unknown",
@@ -576,7 +598,7 @@ export const analyzeArticle = async (
   articleSource: string,
   opts?: { outputMode?: "markdown" | "json" }
 ) => {
-  const forcedOutputMode: "json" = "json";
+  const outputMode: "markdown" | "json" = opts?.outputMode ?? "json"; // default json but allow override
   const hasPremium = checkPremiumAccess();
   const preferred = hasPremium ? MODELS.BEST_FT : MODELS.LITE;
   const fallbacks = [MODELS.STABLE_FLASH, MODELS.HIGH_THROUGHPUT];
@@ -584,14 +606,7 @@ export const analyzeArticle = async (
   // Detect implication categories first
   const categories = detectImplicationCategories(articleTitle, "", articleSource);
 
-  const prompt = buildPrompt(
-    articleTitle,
-    "",
-    articleSource,
-    categories,
-    "Return only the safety-compliant brief.",
-    forcedOutputMode
-  );
+  const prompt = buildPrompt(articleTitle, "", articleSource, categories, "Return only the safety-compliant brief.", outputMode);
 
   try {
     const resp = await makeModelCall({
@@ -603,10 +618,10 @@ export const analyzeArticle = async (
     sendAnalyticsEvent({ event: "analyze_article_served", payload: { model: resp.usedModel } });
 
     const text = resp.text ?? "";
-    const jMatch = text.match(/\{[\s\S]*\}/);
-    if (jMatch) {
+    const { jsonText } = extractFirstJsonObject(text);
+    if (jsonText) {
       try {
-        const parsed = JSON.parse(jMatch[0]);
+        const parsed = JSON.parse(jsonText);
         return coerceBrief(parsed, text, { model: resp.usedModel, fallback: resp.fallbackOccurred });
       } catch (e) {
         return makeErrorBrief("invalid_json_analyze", { model: resp.usedModel, fallback: resp.fallbackOccurred });
@@ -633,19 +648,14 @@ export const generateFullArticle = async (
 ): Promise<Brief> => {
   const cacheKey = await getBriefCacheKey(title, source);
   const hasPremium = checkPremiumAccess();
-  const isPremium = isPremiumContent(title, source);
-
-  if (isPremium && !hasPremium) {
-    const gated = makeErrorBrief("premium_gated", { model: "gated", fallback: true });
-    writeCache(cacheKey, gated, CACHE_TTL_MS);
-    return gated;
-  }
 
   if (!opts?.forceRefresh) {
     const cached = readCache(cacheKey);
     if (cached) {
       sendAnalyticsEvent({ event: "ai_brief_cache_hit", payload: { key: cacheKey } });
-      const payload = typeof cached.payload === "string" ? (() => { try { return JSON.parse(cached.payload); } catch { return null; } })() : cached.payload;
+      const payload = typeof cached.payload === "string" ? (() => {
+        try { return JSON.parse(cached.payload); } catch { return null; }
+      })() : cached.payload;
       return coerceBrief(payload, undefined, { model: payload?.meta?.model || "cache", fallback: !!payload?.meta?.fallback });
     }
   }
@@ -654,13 +664,11 @@ export const generateFullArticle = async (
   const categories = detectImplicationCategories(title, summary, source);
 
   // Build prompt
-  const userInstructions = `\nApply the two-mode logic: if any sensitive triggers are present (minors, suicide/self-harm, sexual exploitation, crime, violence, hate, mass casualty events, graphic harm) use Sensitive Mode with only a 3-5 sentence neutral factual summary and set risk to High or Prohibited, image_safe false by default, ads off. Otherwise use Full Brief Mode with a 200-400 word analytical brief using the required sections; make it executive-grade and more advanced (depth, reasoning, context) while staying factual and concise. Always rephrase, avoid quotes, avoid copying phrasing or structure, and mark uncertain claims as "unconfirmed". Do not include any content that could trigger copyright strikes. Return strict JSON when outputMode=json.\n`;
-  const prompt = buildPrompt(title, summary, source, categories, userInstructions, "json");
+  const userInstructions = `\nApply the two-mode logic: if any sensitive triggers are present (minors, suicide/self-harm, sexual exploitation, crime, violence, hate, mass casualty events, graphic harm) use Sensitive Mode with only a 3-5 sentence neutral factual summary and set risk to High or Prohibited, image_safe false by default, ads off. Otherwise use Full Brief Mode with a 200-400 word analytical brief using the required sections; make it executive-grade and more advanced (depth, reasoning, context) while staying factual and concise. Surface causal drivers, near-term impacts, second-order effects, and actionable signals. For analysis, include brief reasoning on why each point matters and who is affected. Always rephrase, avoid quotes, avoid copying phrasing or structure, and mark uncertain claims as "unconfirmed". Do not include any content that could trigger copyright strikes. Return strict JSON when outputMode=json.\n`;
+  const prompt = buildPrompt(title, summary, source, categories, userInstructions, opts?.outputMode ?? "json");
 
   const preferred = hasPremium ? MODELS.BEST_FT : MODELS.LITE;
-  const fallbackChain = hasPremium
-    ? [MODELS.LITE, MODELS.STABLE_FLASH, MODELS.HIGH_THROUGHPUT]
-    : [MODELS.STABLE_FLASH, MODELS.HIGH_THROUGHPUT];
+  const fallbackChain = [MODELS.LITE, MODELS.STABLE_FLASH, MODELS.HIGH_THROUGHPUT];
 
   try {
     const resp = await makeModelCall({
@@ -673,10 +681,10 @@ export const generateFullArticle = async (
     const content = resp.text ?? "";
     let parsed: any = null;
 
-    const jMatch = content.match(/\{[\s\S]*\}/);
-    if (jMatch) {
+    const { jsonText } = extractFirstJsonObject(content);
+    if (jsonText) {
       try {
-        parsed = JSON.parse(jMatch[0]);
+        parsed = JSON.parse(jsonText);
       } catch (e) {
         parsed = null;
       }
@@ -702,7 +710,7 @@ export const generateFullArticle = async (
   } catch (err: any) {
     console.error("generateFullArticle error", err);
     if (isQuotaError(err) && !checkPremiumAccess()) {
-      return makeErrorBrief("service_unavailable", { fallback: true, model: "quota" });
+      return makeErrorBrief("quota_exhausted", { fallback: true, model: "quota" });
     }
     return makeErrorBrief("service_unavailable", { fallback: true, model: "unknown" });
   }
@@ -714,4 +722,4 @@ export const generateArticleJsonForUi = async (title: string, summary: string, s
   return await generateFullArticle(title, summary, source, { forceRefresh: false, publish: true, outputMode: "json" });
 };
 
-// -------------------- End of file --------------------
+// -------------------- End of file
