@@ -5,6 +5,7 @@ import ArticleCard from './ArticleCard';
 import { Icons, AD_CONFIG, TBLogo } from '../constants.tsx';
 import SmartLoader from './SmartLoader';
 import AdUnit from './AdUnit';
+import { storeArticle } from '../utils/articleStorage';
 
 interface NewsFeedProps {
   activeCategory: Category;
@@ -28,6 +29,11 @@ const NewsFeed: React.FC<NewsFeedProps> = ({ activeCategory, searchQuery, onSele
     try {
       const response = await fetchNews(activeCategory, searchQuery, countryParam);
       setArticles(response.articles);
+      
+      // Store all articles in localStorage cache so they're available when clicked
+      response.articles.forEach(article => {
+        storeArticle(article);
+      });
     } catch (e) {
       setError(true);
     }

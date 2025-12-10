@@ -1,13 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
-import { Article } from '../types';
+import { Article, Category } from '../types';
 import { generateSlug, extractIdFromSlug } from '../utils/slug';
 import { fetchNews } from '../services/newsService';
 import ArticleDetail from '../components/ArticleDetail';
 import SmartLoader from '../components/SmartLoader';
 import { TBLogo } from '../constants.tsx';
-import { getArticleById, getAllCachedArticles } from '../utils/articleStorage';
+import { getArticleById, getAllCachedArticles, storeArticle } from '../utils/articleStorage';
 
 const ArticlePage: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
@@ -62,10 +62,30 @@ const ArticlePage: React.FC = () => {
             'Policy'
           ];
 
+          // First, try to find the article in cached articles to get its category
+          const cachedArticles = getAllCachedArticles();
+          const cachedMatch = cachedArticles.find(
+            (a) => {
+              if (articleId && a.id === articleId) return true;
+              return generateSlug(a.title, a.id) === slug;
+            }
+          );
+
+          // If we found a cached match with a category, try that category first
+          const categoryToTryFirst = cachedMatch?.category as Category | undefined;
+          const categoryList = categoryToTryFirst && categories.includes(categoryToTryFirst)
+            ? [categoryToTryFirst, ...categories.filter(c => c !== categoryToTryFirst)]
+            : categories;
+
           // Search through categories
-          for (const category of categories) {
+          for (const category of categoryList) {
             try {
               const response = await fetchNews(category);
+              
+              // Store fetched articles in cache for future use
+              response.articles.forEach(article => {
+                storeArticle(article);
+              });
               
               // First try to match by ID if we have it
               if (articleId) {
