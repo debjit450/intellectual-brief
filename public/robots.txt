@@ -72,3 +72,14 @@ Crawl-delay: 0
 # Sitemaps
 Sitemap: https://theintellectualbrief.online/sitemap.xml
 Sitemap: https://www.theintellectualbrief.online/sitemap.xml
+Sitemap: https://theintellectualbrief.online/news-sitemap.xml
+
+# Additional search engine optimizations
+# Allow image indexing
+User-agent: Googlebot-Image
+Allow: /article/
+Allow: /assets/
+
+# Allow news indexing
+User-agent: Googlebot-News
+Allow: /article/

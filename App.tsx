@@ -6,6 +6,8 @@ import { Analytics } from "@vercel/analytics/react";
 import HomePage from './pages/HomePage';
 import ArticlePage from './pages/ArticlePage';
 import RSSPage from './pages/RSSPage';
+import SitemapPage from './pages/SitemapPage';
+import NewsSitemapPage from './pages/NewsSitemapPage';
 import AboutPage from './pages/AboutPage';
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
 import TermsOfServicePage from './pages/TermsOfServicePage';
@@ -26,6 +28,8 @@ const App: React.FC = () => {
             <Route path="/" element={<HomePage />} />
             <Route path="/article/:slug" element={<ArticlePage />} />
             <Route path="/rss.xml" element={<RSSPage />} />
+            <Route path="/sitemap.xml" element={<SitemapPage />} />
+            <Route path="/news-sitemap.xml" element={<NewsSitemapPage />} />
             <Route path="/about" element={<AboutPage />} />
             <Route path="/privacy" element={<PrivacyPolicyPage />} />
             <Route path="/terms" element={<TermsOfServicePage />} />

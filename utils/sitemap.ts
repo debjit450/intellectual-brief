@@ -48,12 +48,19 @@ export function generateSitemap(articles: Article[]): string {
       changefreq: 'hourly',
     },
     // Article pages
-    ...articles.map((article) => ({
-      loc: `${BASE_URL}/article/${generateSlug(article.title, article.id)}`,
-      priority: '0.8',
-      changefreq: 'weekly',
-      lastmod: new Date().toISOString().split('T')[0],
-    })),
+    ...articles.map((article) => {
+      // Use article timestamp if available, otherwise use current date
+      const lastmod = article.timestamp 
+        ? new Date(article.timestamp).toISOString().split('T')[0]
+        : new Date().toISOString().split('T')[0];
+      
+      return {
+        loc: `${BASE_URL}/article/${generateSlug(article.title, article.id)}`,
+        priority: '0.8',
+        changefreq: 'weekly',
+        lastmod,
+      };
+    }),
   ];
 
   const urlEntries = urls

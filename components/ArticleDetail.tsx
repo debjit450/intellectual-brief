@@ -23,9 +23,11 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
   const [shareFeedback, setShareFeedback] = useState<string | null>(null);
 
   const articleSlug = generateSlug(article.title, article.id);
+  // Always use canonical domain (non-www) for SEO consistency
+  const canonicalDomain = 'https://theintellectualbrief.online';
   const articleUrl = typeof window !== 'undefined'
-    ? `${window.location.origin}/article/${articleSlug}`
-    : `https://theintellectualbrief.online/article/${articleSlug}`;
+    ? `${canonicalDomain}/article/${articleSlug}`
+    : `${canonicalDomain}/article/${articleSlug}`;
   const title = `${article.title} • The Intellectual Brief`;
   const description =
     article.summary ||
@@ -141,7 +143,9 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
         "@type": "ImageObject",
         "url": article.imageUrl,
         "width": 1200,
-        "height": 630
+        "height": 630,
+        "caption": article.title,
+        "description": article.summary || article.title
       }
     ] : undefined,
     "author": {
@@ -188,6 +192,32 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
       "name": article.source
     }] : undefined
   }), [article, articleUrl, publishedDate, keywords, currentContent, wordCount]);
+
+  // Separate ImageObject schema for Google Images search optimization
+  const imageLd = React.useMemo(() => {
+    if (!article.imageUrl) return null;
+    return {
+      "@context": "https://schema.org",
+      "@type": "ImageObject",
+      "url": article.imageUrl,
+      "contentUrl": article.imageUrl,
+      "width": 1200,
+      "height": 630,
+      "caption": article.title,
+      "description": article.summary || article.title,
+      "name": article.title,
+      "license": "https://theintellectualbrief.online/terms",
+      "creator": {
+        "@type": "Organization",
+        "name": article.source || "The Intellectual Brief"
+      },
+      "copyrightHolder": {
+        "@type": "Organization",
+        "name": "The Intellectual Brief"
+      },
+      "inLanguage": "en-US"
+    };
+  }, [article]);
 
   // BreadcrumbList JSON-LD
   const breadcrumbLd = {
@@ -275,10 +305,55 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
         <meta name="article:opinion" content="false" />
         <meta name="article:content_tier" content="free" />
 
+        {/* Additional search engine meta tags */}
+        <meta name="format-detection" content="telephone=no" />
+        <meta name="geo.region" content="US" />
+        <meta name="geo.placename" content="United States" />
+        <meta name="ICBM" content="39.8283, -98.5795" />
+        
+        {/* Microsoft/Bing specific */}
+        <meta name="msvalidate.01" content="" />
+        <meta name="msapplication-TileColor" content="#141414" />
+        
+        {/* Apple specific */}
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        
+        {/* Additional Open Graph for better social sharing */}
+        <meta property="og:image:type" content="image/jpeg" />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+        
+        {/* Article specific meta */}
+        <meta name="article:published_time" content={publishedDate} />
+        <meta name="article:modified_time" content={publishedDate} />
+        <meta name="article:expiration_time" content="" />
+        <meta name="article:author" content="The Intellectual Brief" />
+        <meta name="article:section" content={article.category || "Technology"} />
+        <meta name="article:tag" content={article.category || "Technology"} />
+        
+        {/* DC (Dublin Core) metadata for better indexing */}
+        <meta name="DC.title" content={article.title} />
+        <meta name="DC.creator" content="The Intellectual Brief" />
+        <meta name="DC.subject" content={article.category || "Technology"} />
+        <meta name="DC.description" content={description} />
+        <meta name="DC.publisher" content="The Intellectual Brief" />
+        <meta name="DC.date" content={publishedDate} />
+        <meta name="DC.type" content="Text" />
+        <meta name="DC.format" content="text/html" />
+        <meta name="DC.identifier" content={articleUrl} />
+        <meta name="DC.language" content="en-US" />
+        <meta name="DC.rights" content="Copyright The Intellectual Brief" />
+
         {/* Structured Data - Updated when content loads */}
         <script type="application/ld+json">
           {JSON.stringify(articleLd)}
         </script>
+        {imageLd && (
+          <script type="application/ld+json">
+            {JSON.stringify(imageLd)}
+          </script>
+        )}
         <script type="application/ld+json">
           {JSON.stringify(breadcrumbLd)}
         </script>
@@ -366,18 +441,22 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
             </div>
           </header>
 
-          {/* Hero Image */}
+          {/* Hero Image - Optimized for SEO and Google Images */}
           {article.imageUrl && !imageError ? (
             <div className="w-full aspect-[21/9] mb-12 overflow-hidden bg-neutral-100 dark:bg-neutral-900 shadow-sm animate-fade-in">
               <img
                 src={article.imageUrl}
-                alt={`${article.title} - Featured image from ${article.source}`}
+                alt={article.title}
                 title={article.title}
                 className="w-full h-full object-cover"
                 onError={() => setImageError(true)}
                 loading="eager"
                 fetchPriority="high"
                 itemProp="image"
+                width="1200"
+                height="630"
+                itemScope
+                itemType="https://schema.org/ImageObject"
               />
             </div>
           ) : (
