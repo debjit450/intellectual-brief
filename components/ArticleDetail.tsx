@@ -280,16 +280,6 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
     return !blocked && risk !== "prohibited" && risk !== "high";
   }, [briefData, blocked]);
 
-  const imageAllowed = useMemo(() => {
-    if (blocked) return false;
-    if (!briefData) return !imageError;
-    const sensitiveList = (briefData.sensitive_categories || []).map((c) => c?.toLowerCase?.() || "");
-    const hasSensitive = sensitiveList.some((c) =>
-      ["minors", "suicide", "sexual_exploitation", "crime", "violence", "hate", "mass_casualty", "graphic_harm"].includes(c)
-    );
-    return briefData.image_safe !== false && !hasSensitive && !imageError;
-  }, [briefData, blocked, imageError]);
-
   const isSensitiveMode = useMemo(() => {
     const risk = (briefData?.risk_rating_adsense || "").toLowerCase();
     const sensitiveList = (briefData?.sensitive_categories || []).map((c) => c?.toLowerCase?.() || "");
@@ -387,7 +377,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
 
   // Separate ImageObject schema for Google Images search optimization
   const imageLd = React.useMemo(() => {
-    if (!article.imageUrl || !imageAllowed) return null;
+    if (!article.imageUrl) return null;
     return {
       "@context": "https://schema.org",
       "@type": "ImageObject",
@@ -634,7 +624,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
           </header>
 
           {/* Hero Image - Optimized for SEO and Google Images */}
-          {article.imageUrl && imageAllowed ? (
+          {article.imageUrl ? (
             <div className="w-full aspect-[21/9] mb-12 overflow-hidden bg-neutral-100 dark:bg-neutral-900 shadow-sm animate-fade-in">
               <img
                 src={article.imageUrl}
@@ -654,7 +644,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
           ) : (
             <div className="w-full aspect-[21/9] mb-12 flex flex-col items-center justify-center gap-3 bg-neutral-100 dark:bg-neutral-900/50 border border-neutral-200 dark:border-neutral-800 text-sm text-neutral-500">
               <img src={logo} alt="Logo" className="w-12 h-12 opacity-20" />
-              <span className="text-xs uppercase tracking-[0.2em]">Image hidden for safety</span>
+              <span className="text-xs uppercase tracking-[0.2em]">Image not available</span>
             </div>
           )}
 
