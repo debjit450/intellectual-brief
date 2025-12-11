@@ -792,7 +792,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
                     },
                   }}
                 >
-                  {fullContent || (loading && article.summary ? article.summary : "")}
+                  {fullContent}
                 </ReactMarkdown>
               )}
 
