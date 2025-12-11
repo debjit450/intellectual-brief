@@ -41,3 +41,8 @@ externalPort = 3001
 deploymentTarget = "static"
 build = ["npm", "run", "build"]
 publicDir = "dist"
+
+[userenv]
+
+[userenv.shared]
+VITE_API_BASE_URL = "https://tib-backend-production.up.railway.app"
