@@ -1,151 +1,132 @@
 import { Article } from "../types";
-import { moderateArticle, shouldBlockContent, type ModerationResult } from "../services/contentModeration";
+import { moderateArticleWithAI, shouldBlockContent, type ModerationResult } from "../services/contentModeration";
 
-// Legacy keyword check for quick client-side filtering (before full moderation)
-export const SENSITIVE_KEYWORDS = [
-  "abuse", "assault", "minor", "child", "suicide", "self-harm", "self harm",
-  "sexual", "exploitation", "trafficking", "kidnap", "kidnapping", "abduction",
-  "rape", "crime", "violent", "violence", "homicide", "murder", "shooting",
-  "gunfire", "attack", "massacre", "terror", "explosion", "bomb", "graphic",
-  "gore", "blood", "beheading", "decapitation", "hate", "extremist",
-  "mass casualty", "war crime", "domestic violence", "copyright", "infringement",
-  "lawsuit", "legal dispute", "piracy", "counterfeit",
+// Only block truly harmful content - not news reporting
+// These are extreme cases that should never appear regardless of context
+export const TRULY_HARMFUL_PATTERNS = [
+  /child\s+(porn|sexual|exploitation)/i,
+  /how\s+to\s+(make|build)\s+(bomb|weapon|explosive)/i,
+  /instructions?\s+(for|to)\s+(kill|harm|attack)/i,
 ];
 
 /**
- * Quick keyword check for client-side filtering
- * For comprehensive moderation, use moderateContent() from contentModeration service
+ * Check for truly harmful content patterns only
+ * News reporting about events is NOT blocked - only instructional harmful content
  */
-export const containsSensitiveKeywords = (text: string): boolean => {
+export const containsTrulyHarmfulContent = (text: string): boolean => {
   const normalized = (text || "").toLowerCase();
-  return SENSITIVE_KEYWORDS.some((keyword) => normalized.includes(keyword));
+  return TRULY_HARMFUL_PATTERNS.some((pattern) => pattern.test(normalized));
+};
+
+// Keep legacy export for backwards compatibility but make it permissive
+export const containsSensitiveKeywords = (_text: string): boolean => {
+  return false; // Disabled - use AI moderation instead
 };
 
 /**
- * Filter unsafe articles using comprehensive moderation
- * Non-blocking: Shows articles immediately, filters progressively
- * Falls back to keyword filtering if moderation times out or fails
+ * Filter unsafe articles using AI-powered moderation
+ * Fast, non-blocking, context-aware filtering
  */
 export const filterUnsafeArticles = async (articles: Article[]): Promise<Article[]> => {
-  // First, do quick keyword filtering to show articles immediately
-  const keywordFiltered = articles.filter(
-    (article) =>
-      !containsSensitiveKeywords(
-        `${article.title} ${article.summary} ${article.category || ""}`
-      )
+  if (articles.length === 0) return [];
+
+  // Quick pattern check for truly harmful content (instant)
+  const patternFiltered = articles.filter(
+    (article) => !containsTrulyHarmfulContent(
+      `${article.title} ${article.summary || ""}`
+    )
   );
 
-  // If no articles after keyword filter, return empty (safety first)
-  if (keywordFiltered.length === 0) {
-    return [];
-  }
-
-  // Try moderation with timeout - don't block article loading
+  // Run AI moderation in parallel with aggressive timeout
   try {
-    // Set a timeout for moderation (5 seconds max)
-    const moderationPromise = Promise.all(
-      keywordFiltered.map((article) =>
-        Promise.race([
-          moderateArticle(article.title, article.summary || "", article.source || "", {
-            checkCopyright: false, // Skip copyright check for speed
-            strictMode: false, // Less strict for faster processing
-          }),
-          // Timeout after 3 seconds per article
-          new Promise<ModerationResult>((resolve) =>
-            setTimeout(() => {
-              resolve({
-                isSafe: true,
-                isBlocked: false,
-                riskLevel: "low",
-                categories: [],
-                reasons: [],
-                copyrightRisk: false,
-                confidence: 0.5,
-              });
-            }, 3000)
-          ),
-        ])
-      )
-    );
-
-    // Overall timeout of 5 seconds for all moderation
-    const moderationResults = await Promise.race([
-      moderationPromise,
-      new Promise<ModerationResult[]>((resolve) =>
-        setTimeout(() => {
-          // Return safe results on timeout
-          resolve(
-            keywordFiltered.map(() => ({
+    const moderationPromises = patternFiltered.map((article) =>
+      Promise.race([
+        moderateArticleWithAI(article.title, article.summary || "", article.source || ""),
+        // 2 second timeout per article - if slow, assume safe
+        new Promise<ModerationResult>((resolve) =>
+          setTimeout(() => {
+            resolve({
               isSafe: true,
               isBlocked: false,
-              riskLevel: "low" as const,
+              riskLevel: "low",
               categories: [],
-              reasons: [],
+              reasons: ["Timeout - assumed safe"],
               copyrightRisk: false,
               confidence: 0.5,
-            }))
-          );
-        }, 5000)
+            });
+          }, 2000)
+        ),
+      ])
+    );
+
+    // Overall 3 second timeout for batch
+    const moderationResults = await Promise.race([
+      Promise.all(moderationPromises),
+      new Promise<ModerationResult[]>((resolve) =>
+        setTimeout(() => {
+          resolve(patternFiltered.map(() => ({
+            isSafe: true,
+            isBlocked: false,
+            riskLevel: "low" as const,
+            categories: [],
+            reasons: ["Batch timeout"],
+            copyrightRisk: false,
+            confidence: 0.5,
+          })));
+        }, 3000)
       ),
     ]);
 
-    // Filter based on moderation results
-    return keywordFiltered.filter((_, index) => {
+    // Only filter out articles that AI explicitly blocked
+    return patternFiltered.filter((_, index) => {
       const result = moderationResults[index];
-      return !shouldBlockContent(result);
+      return !result.isBlocked;
     });
   } catch (error) {
-    console.warn("Moderation service error, using keyword-filtered articles:", error);
-    // Return keyword-filtered articles (better than nothing)
-    return keywordFiltered;
+    console.warn("AI moderation error, showing all articles:", error);
+    return patternFiltered;
   }
 };
 
 /**
- * Synchronous version for client-side use (uses keyword filtering only)
- * For full moderation, use the async version above
+ * Synchronous version - only checks truly harmful patterns
  */
 export const filterUnsafeArticlesSync = (articles: Article[]): Article[] => {
   return articles.filter(
-    (article) =>
-      !containsSensitiveKeywords(
-        `${article.title} ${article.summary} ${article.category || ""}`
-      )
+    (article) => !containsTrulyHarmfulContent(
+      `${article.title} ${article.summary || ""}`
+    )
   );
 };
 
 /**
- * Check if an article should be blocked
+ * Check if an article should be blocked using AI moderation
  */
 export const isArticleBlocked = async (
   article: Article
 ): Promise<{ blocked: boolean; reason?: string; result?: ModerationResult }> => {
+  // Quick pattern check first
+  if (containsTrulyHarmfulContent(`${article.title} ${article.summary || ""}`)) {
+    return {
+      blocked: true,
+      reason: "Contains harmful content patterns",
+    };
+  }
+
   try {
-    const result = await moderateArticle(
+    const result = await moderateArticleWithAI(
       article.title,
       article.summary || "",
-      article.source || "",
-      {
-        checkCopyright: true,
-        strictMode: true,
-      }
+      article.source || ""
     );
 
     return {
-      blocked: shouldBlockContent(result),
+      blocked: result.isBlocked,
       reason: result.reasons.join("; "),
       result,
     };
   } catch (error) {
-    console.error("Moderation check failed:", error);
-    // Fallback to keyword check
-    const hasKeywords = containsSensitiveKeywords(
-      `${article.title} ${article.summary} ${article.category || ""}`
-    );
-    return {
-      blocked: hasKeywords,
-      reason: hasKeywords ? "Contains sensitive keywords" : undefined,
-    };
+    console.error("AI moderation check failed:", error);
+    return { blocked: false };
   }
 };
-

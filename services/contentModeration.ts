@@ -707,3 +707,167 @@ export const getPerspectiveAPIUsage = (): { used: number; limit: number; percent
   };
 };
 
+// -------------------- AI-Powered Content Moderation (Gemini) --------------------
+import { GoogleGenAI } from "@google/genai";
+
+// Create AI client for moderation - uses Vite's process.env injection
+const getModerationAI = (): GoogleGenAI | null => {
+  try {
+    // Vite injects these at build time via vite.config.ts define
+    const apiKey = (typeof process !== 'undefined' && process.env?.API_KEY) ||
+                   (typeof process !== 'undefined' && process.env?.GEMINI_API_KEY) ||
+                   null;
+    if (!apiKey) {
+      console.debug("AI moderation: No API key available");
+      return null;
+    }
+    return new GoogleGenAI({ apiKey });
+  } catch (e) {
+    console.debug("AI moderation init error:", e);
+    return null;
+  }
+};
+
+const AI_MODERATION_CACHE_PREFIX = "ai_moderation_v1";
+const AI_MODERATION_CACHE_TTL = 1000 * 60 * 60 * 24; // 24 hours
+
+const getAIModerationCacheKey = (title: string, summary: string): string => {
+  const text = `${title}::${summary}`.slice(0, 200);
+  let hash = 0;
+  for (let i = 0; i < text.length; i++) {
+    hash = ((hash << 5) - hash) + text.charCodeAt(i);
+    hash = hash & hash;
+  }
+  return `${AI_MODERATION_CACHE_PREFIX}::${Math.abs(hash).toString(36)}`;
+};
+
+const readAIModerationCache = (key: string): ModerationResult | null => {
+  try {
+    if (typeof window === "undefined" || !window.localStorage) return null;
+    const cached = window.localStorage.getItem(key);
+    if (!cached) return null;
+    const parsed = JSON.parse(cached);
+    if (parsed.expiresAt && Date.now() > parsed.expiresAt) {
+      window.localStorage.removeItem(key);
+      return null;
+    }
+    return parsed.result;
+  } catch {
+    return null;
+  }
+};
+
+const writeAIModerationCache = (key: string, result: ModerationResult) => {
+  try {
+    if (typeof window === "undefined" || !window.localStorage) return;
+    window.localStorage.setItem(key, JSON.stringify({
+      result,
+      expiresAt: Date.now() + AI_MODERATION_CACHE_TTL,
+    }));
+  } catch {}
+};
+
+/**
+ * AI-powered content moderation using Gemini
+ * Context-aware: understands news reporting vs. harmful content
+ * Only blocks truly harmful content, not legitimate news
+ */
+export const moderateArticleWithAI = async (
+  title: string,
+  summary: string,
+  source: string
+): Promise<ModerationResult> => {
+  const cacheKey = getAIModerationCacheKey(title, summary);
+  const cached = readAIModerationCache(cacheKey);
+  if (cached) return cached;
+
+  const moderationAI = getModerationAI();
+  
+  // If no AI available, return safe (don't block)
+  if (!moderationAI) {
+    return {
+      isSafe: true,
+      isBlocked: false,
+      riskLevel: "low",
+      categories: [],
+      reasons: ["AI moderation unavailable"],
+      copyrightRisk: false,
+      confidence: 0.5,
+    };
+  }
+
+  const prompt = `You are a content moderation AI for a news website. Analyze this article and determine if it should be BLOCKED.
+
+IMPORTANT: This is a NEWS website. Normal news reporting about world events, politics, crime, conflicts, etc. should NOT be blocked.
+
+Only BLOCK content that is:
+1. Explicit instructions for violence, weapons, or harmful acts
+2. Child exploitation or CSAM references
+3. Explicit pornographic content (not news about related topics)
+4. Direct incitement to violence against specific groups
+5. Obvious spam or scam content
+
+DO NOT BLOCK:
+- News about crimes, wars, conflicts, terrorism (reporting is allowed)
+- Political content or controversial opinions
+- Business/tech news about lawsuits, investigations
+- Health news about diseases, deaths, medical issues
+- Content mentioning violence in context of news reporting
+
+Article Title: ${title}
+Article Summary: ${summary}
+Source: ${source}
+
+Respond with ONLY valid JSON:
+{"block": false, "reason": "Safe news content"} 
+OR
+{"block": true, "reason": "specific reason"}`;
+
+  try {
+    const response = await Promise.race([
+      (moderationAI as any).models.generateContent({
+        model: "gemini-2.0-flash-lite",
+        contents: prompt,
+        temperature: 0.1,
+        maxOutputTokens: 100,
+      }),
+      new Promise<null>((_, reject) => 
+        setTimeout(() => reject(new Error("AI timeout")), 2000)
+      ),
+    ]);
+
+    if (!response) throw new Error("No response");
+
+    const text = (response as any)?.text || "";
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      const result: ModerationResult = {
+        isSafe: !parsed.block,
+        isBlocked: parsed.block === true,
+        riskLevel: parsed.block ? "prohibited" : "low",
+        categories: parsed.block ? ["ai_flagged"] : [],
+        reasons: [parsed.reason || "AI analysis"],
+        copyrightRisk: false,
+        confidence: 0.9,
+      };
+      writeAIModerationCache(cacheKey, result);
+      return result;
+    }
+  } catch (error) {
+    console.warn("AI moderation error:", error);
+  }
+
+  // Default: allow content (don't block on error)
+  return {
+    isSafe: true,
+    isBlocked: false,
+    riskLevel: "low",
+    categories: [],
+    reasons: ["AI check inconclusive"],
+    copyrightRisk: false,
+    confidence: 0.5,
+  };
+};
+
